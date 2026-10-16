@@ -1,0 +1,9 @@
+parameters:
+    level: max
+    phpVersion: 80300
+    paths:
+        - src
+        - tests
+        - config
+    tmpDir: var/phpstan
+    checkUninitializedProperties: true

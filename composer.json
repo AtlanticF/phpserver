@@ -1,0 +1,48 @@
+{
+    "name": "phpserver/phpserver",
+    "description": "Slight prefork multi-process text RPC server for PHP, Kubernetes-ready.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": ["rpc", "server", "prefork", "pcntl", "kubernetes"],
+    "require": {
+        "php": ">=8.3",
+        "ext-pcntl": "*",
+        "ext-posix": "*",
+        "ext-sockets": "*"
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.64",
+        "phpstan/phpstan": "^2.0",
+        "phpunit/phpunit": "^11.5"
+    },
+    "suggest": {
+        "ext-inotify": "Local auto-reload on file change (dev only)",
+        "psr/log": "Optional. Adapt PhpServer\\Log\\LoggerInterface to a PSR-3 logger such as Monolog. Not required at runtime; see examples/psr3-logger-adapter.php."
+    },
+    "autoload": {
+        "psr-4": {
+            "PhpServer\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "PhpServer\\Examples\\": "examples/",
+            "PhpServer\\Tests\\": "tests/"
+        }
+    },
+    "bin": [
+        "bin/serverd",
+        "bin/worker",
+        "bin/phpserver-rpc"
+    ],
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {}
+    },
+    "scripts": {
+        "test": "phpunit",
+        "analyse": "phpstan analyse",
+        "cs": "php-cs-fixer check",
+        "cs:fix": "php-cs-fixer fix"
+    }
+}

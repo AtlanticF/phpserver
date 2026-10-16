@@ -1,0 +1,5 @@
+* text=auto eol=lf
+
+bin/serverd text eol=lf
+bin/worker text eol=lf
+bin/phpserver-rpc text eol=lf

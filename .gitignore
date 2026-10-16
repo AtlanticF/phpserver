@@ -1,0 +1,9 @@
+/vendor/
+/var/
+.phpunit.cache/
+.php-cs-fixer.cache
+composer.phar
+.idea/
+.vscode/
+*.swp
+.DS_Store
