@@ -1,0 +1,14 @@
+This project is an independent, clean-room modern rewrite inspired by the
+architecture and design ideas of the original PHPServer (v1.3.4, PHP 5.6 era),
+a multi-process PHP RPC server originally developed and used in production at
+Jumei (聚美优品).
+
+It contains no source code, configuration, or documentation from the original
+project. The original's core idea is kept: simple and slight — a master
+process preforking workers, a select-based event loop, and a two-hook worker
+contract (dealInput / dealProcess).
+
+The names "PHPServer" and "Jumei" are used only to describe provenance. This
+project is not affiliated with or endorsed by Jumei.
+
+Licensed under the MIT License. See the LICENSE file.
