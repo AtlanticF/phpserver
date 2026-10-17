@@ -41,5 +41,13 @@ final class ExceptionHierarchyTest extends TestCase
         $exception = new ProtocolException('frame too large', -32002);
 
         self::assertSame(-32002, $exception->getCode());
+        self::assertFalse($exception->isFrameLevel());
+    }
+
+    public function testProtocolFrameLevelIsExplicit(): void
+    {
+        $exception = new ProtocolException('frame too large', -32002, null, true);
+
+        self::assertTrue($exception->isFrameLevel());
     }
 }
