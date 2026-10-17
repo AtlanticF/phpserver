@@ -2,14 +2,15 @@
 
 轻量的多进程 text RPC 服务器，面向 Linux 和 Kubernetes。这是 2016 年 PHPServer 的干净重写：保留 prefork 和两个业务钩子的方向，不携带旧协议、旧品牌或运行时依赖。
 
-**当前状态：M1。** 仓库里现在只有骨架和所有后续模块都会用到的基础件：
+**当前状态：M2。** 仓库里有骨架、基础件，以及 worker 会用的事件循环：
 
 - 配置：PHP 数组文件、`PHPSERVER_*` 环境变量覆盖、启动前校验
 - 日志：自带 `LoggerInterface`（方法签名与 PSR-3 同形）、文本或 JSON 行、request-id
 - 时钟：墙钟 + 单调 `hrtime`
 - 异常：`PhpServerException` 标记接口和四个具体异常
+- 事件循环：`LoopInterface` / `SelectLoop`（流、定时器、信号）
 
-还没有事件循环、text-rpc 编解码、worker、master、admin 端口。`bin/serverd`、`bin/worker`、`bin/phpserver-rpc` 只是占位，打印 `not implemented` 并以状态码 1 退出。
+还没有 text-rpc 编解码、worker、master、admin 端口。`bin/serverd`、`bin/worker`、`bin/phpserver-rpc` 只是占位，打印 `not implemented` 并以状态码 1 退出。
 
 ## 要求
 
@@ -29,6 +30,10 @@ composer show --tree
 ```
 
 `composer show --no-dev --name-only` 应为空。修正代码风格用 `composer cs:fix`。
+
+## 事件循环
+
+[`docs/event-loop.md`](docs/event-loop.md)。`SelectLoop` 用 `stream_select`；没有流时睡眠，不放占位 FD。
 
 ## 配置
 
