@@ -11,7 +11,7 @@ final class PlaceholderBinTest extends TestCase
     public function testBinsPrintNotImplementedAndExitNonZero(): void
     {
         $root = dirname(__DIR__, 3);
-        foreach (['serverd', 'worker', 'phpserver-rpc'] as $name) {
+        foreach (['serverd', 'worker'] as $name) {
             $pipes = [];
             $process = proc_open([PHP_BINARY, $root . '/bin/' . $name], [
                 1 => ['pipe', 'w'],

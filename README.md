@@ -2,15 +2,17 @@
 
 轻量的多进程 text RPC 服务器，面向 Linux 和 Kubernetes。这是 2016 年 PHPServer 的干净重写：保留 prefork 和两个业务钩子的方向，不携带旧协议、旧品牌或运行时依赖。
 
-**当前状态：M2。** 仓库里有骨架、基础件，以及 worker 会用的事件循环：
+**当前状态：M3。** 仓库里有骨架、基础件、事件循环，以及 text-rpc/1 的帧编解码和阻塞客户端：
 
 - 配置：PHP 数组文件、`PHPSERVER_*` 环境变量覆盖、启动前校验
 - 日志：自带 `LoggerInterface`（方法签名与 PSR-3 同形）、文本或 JSON 行、request-id
 - 时钟：墙钟 + 单调 `hrtime`
 - 异常：`PhpServerException` 标记接口和四个具体异常
 - 事件循环：`LoopInterface` / `SelectLoop`（流、定时器、信号）
+- 协议：text-rpc/1 帧（魔数 `TRPC/1`）和 JSON body
+- 客户端：阻塞的 `Client`，以及 `bin/phpserver-rpc`
 
-还没有 text-rpc 编解码、worker、master、admin 端口。`bin/serverd`、`bin/worker`、`bin/phpserver-rpc` 只是占位，打印 `not implemented` 并以状态码 1 退出。目前不能对外提供服务。
+还没有 worker、master、admin 端口。`bin/serverd` 和 `bin/worker` 仍是占位，打印 `not implemented` 并以状态码 1 退出。目前不能对外提供服务。
 
 蓝图：[docs/ROADMAP.md](docs/ROADMAP.md)。
 待办：[TODO.md](TODO.md)。
@@ -51,6 +53,23 @@ docker compose run --rm dev sh
 ```
 
 `docker compose run --rm dev` 同样跑这三项检查，并把当前目录挂进容器（`vendor` 用镜像里的）。进 shell 用上面的第三条。
+
+## 调用 text-rpc/1
+
+规格在 [`docs/protocol-text-rpc.md`](docs/protocol-text-rpc.md)。有服务端时可以手敲一帧（`len` 按 body 的字节数，不含行尾）：
+
+```sh
+body='{"method":"Echo.say","params":["hi"]}'
+printf 'TRPC/1 REQ 1 json %d\n%s\n' "$(printf %s "$body" | wc -c)" "$body" | nc 127.0.0.1 9000
+```
+
+或用官方 CLI：
+
+```sh
+bin/phpserver-rpc 127.0.0.1:9000 Echo.say '["hi"]' -v
+```
+
+`-v` 把收发的帧打到 stderr，body 截到 256 字节，并打印 trace-id。`--raw` 原样输出响应 body。退出码：`0` 成功，`1` RPC 错误，`2` 协议错误，`3` 网络错误，`64` 用法错误。这一里程碑没有产品服务端；测试用 `tests/Fixture` 里的回显套接字，不启动 `bin/worker`。
 
 ## 事件循环
 

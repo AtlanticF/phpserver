@@ -1,6 +1,6 @@
 # TODO
 
-对照 [docs/ROADMAP.md](docs/ROADMAP.md)。M1、M2 的勾选以仓库里的代码和测试为准。M3 起还没开始。
+对照 [docs/ROADMAP.md](docs/ROADMAP.md)。M1、M2、M3 的勾选以仓库里的代码和测试为准。M4 起还没开始。
 
 每个里程碑结束时，PHP 8.3 和 8.4 上 `composer test`、`composer analyse`、`composer cs` 都要过，`require` 里仍然没有第三方包。
 
@@ -9,8 +9,8 @@
 - [x] `composer.json`：包名 `phpserver/phpserver`、MIT、`php >=8.3`、扩展 `pcntl` / `posix` / `sockets`，`require` 无包，`bin` 登记三个脚本。验收：`composer validate --strict` 通过，`composer show --no-dev --name-only` 为空。
 - [x] PHPUnit 11 的 Unit / Integration 两套件、PHPStan level max、php-cs-fixer `@PER-CS`。验收：`phpunit.xml.dist`、`phpstan.neon`、`.php-cs-fixer.dist.php` 与 CI 一致。
 - [x] `.github/workflows/ci.yml` 在 PHP 8.3 和 8.4 上跑 validate、无运行时包、`cs`、`analyse`、`test`。验收：工作流包含这两档，且 `fail-fast` 为 false。
-- [x] `CHANGELOG.md` 把库和 text-rpc 协议分成两栏；`LICENSE` 为 MIT。验收：Unreleased 的协议栏写明本阶段不发布实现。
-- [x] `bin/serverd`、`bin/worker`、`bin/phpserver-rpc` 只是占位。验收：`tests/Integration/Bin/PlaceholderBinTest.php` 断言打印 `not implemented` 并以状态码 1 退出。
+- [x] `CHANGELOG.md` 把库和 text-rpc 协议分成两栏；`LICENSE` 为 MIT。验收：两栏都在；协议实现记在协议栏，不跟库的补丁号绑死。
+- [x] `bin/serverd`、`bin/worker`、`bin/phpserver-rpc` 在 M1 只是占位。验收：`tests/Integration/Bin/PlaceholderBinTest.php` 仍断言 `serverd` 和 `worker` 打印 `not implemented` 并以状态码 1 退出。`phpserver-rpc` 从 M3 起是客户端。
 - [x] `src/Exception/`：`PhpServerException` 标记接口，以及 `ConfigException`、`ProtocolException`、`RateLimitedException`、`ProcessException`。验收：`tests/Unit/Exception/ExceptionHierarchyTest.php`；`RateLimitedException` 默认码 `-32001`。
 - [x] `src/Support/ClockInterface.php`、`src/Support/SystemClock.php`，测试时钟在 `tests/Support/MutableClock.php`。验收：`tests/Unit/Support/SystemClockTest.php` 里改墙钟不改变 `monotonic()`。
 - [x] `src/Config/`：PHP 数组文件、`PHPSERVER_*` 覆盖、启动前校验。验收：`tests/Unit/Config/ConfigLoaderTest.php` 中环境变量压过文件；未知键只 warning。
@@ -41,16 +41,16 @@
 
 先写规格，再写编解码。本里程碑没有服务端 worker，也没有连接池或异步客户端。
 
-- [ ] `docs/protocol-text-rpc.md`。验收：写清帧、UTF-8、长度按字节、前导零和负数、`max_body_bytes` / 头行 256 字节、`ErrorCode`、trace-id 的位置，并给一组能用 `nc` 手敲的样例；魔数为 `TRPC/1`。
-- [ ] `src/Protocol/ProtocolInterface.php`。验收：对一块缓冲给出「还要多少字节 / 已经完整 / 非法」；非法路径抛 `ProtocolException`，不返回含糊的假。
-- [ ] `src/Protocol/TextRpc/ErrorCode.php`。验收：含 `-32700`、`-32600`～`-32603`，以及 `-32001` RateLimited、`-32002` FrameTooLarge、`-32003` Timeout、`-32004` UnsupportedVersionOrCodec、`-32005` ShuttingDown、`-32006` Overloaded。
-- [ ] `src/Protocol/TextRpc/` 中的版本常量（魔数 `TRPC/1`）。验收：不认识的魔数映射到 `-32004`，而不是按 v1 硬解析。
-- [ ] `src/Protocol/TextRpc/FrameDecoder.php` 与 `tests/Unit/Protocol/TextRpc/FrameDecoderTest.php`。验收：逐字节半包、两帧一次喂入、超长 length、负数或前导零、非法 UTF-8、未知版本，分别得到「还要字节」「完整帧」或 `ProtocolException` 加 `ErrorCode`。
-- [ ] `src/Protocol/TextRpc/FrameEncoder.php` 与往返测试。验收：空 body 和含非 UTF-8 字节的 body 编码后再解码，得到同一帧；发送端用 LF。
-- [ ] 用规格文档里同一串字节做解码测试。验收：文档样例和单测里的字节序列一致，解码器接受它。
-- [ ] `src/Client/` 阻塞客户端：连接、超时、发送、读完一帧。验收：只依赖 `Protocol`，不引用 `Worker` 或 `Master`。
-- [ ] `bin/phpserver-rpc`：`host:port`、方法、payload、`-v` 时按截断长度打印帧、显示 request-id 和错误码。验收：`--help` 文本稳定；退出码区分成功、协议错误、网络错误。
-- [ ] 测试夹具里的最小回显 socket（放在 `tests/`，不是产品代码）。验收：CLI 对这个夹具往返成功，测试不启动 `bin/worker`。
+- [x] `docs/protocol-text-rpc.md`。验收：写清帧、UTF-8、长度按字节、前导零和负数、`max_body_bytes` / 头行 256 字节、`ErrorCode`、trace-id 的位置，并给一组能用 `nc` 手敲的样例；魔数为 `TRPC/1`。
+- [x] `src/Protocol/ProtocolInterface.php`。验收：对一块缓冲给出「还要多少字节 / 已经完整 / 非法」；非法路径抛 `ProtocolException`，不返回含糊的假。
+- [x] `src/Protocol/TextRpc/ErrorCode.php`。验收：含 `-32700`、`-32600`～`-32603`，以及 `-32001` RateLimited、`-32002` FrameTooLarge、`-32003` Timeout、`-32004` UnsupportedVersionOrCodec、`-32005` ShuttingDown、`-32006` Overloaded。
+- [x] `src/Protocol/TextRpc/` 中的版本常量（魔数 `TRPC/1`）。验收：不认识的魔数映射到 `-32004`，而不是按 v1 硬解析。
+- [x] `src/Protocol/TextRpc/FrameDecoder.php` 与 `tests/Unit/Protocol/TextRpc/FrameDecoderTest.php`。验收：逐字节半包、两帧一次喂入、超长 length、负数或前导零、非法 UTF-8、未知版本，分别得到「还要字节」「完整帧」或 `ProtocolException` 加 `ErrorCode`。
+- [x] `src/Protocol/TextRpc/FrameEncoder.php` 与往返测试。验收：空 body 和含非 UTF-8 字节的 body 编码后再解码，得到同一帧；发送端用 LF。
+- [x] 用规格文档里同一串字节做解码测试。验收：文档样例和单测里的字节序列一致，解码器接受它。
+- [x] `src/Client/` 阻塞客户端：连接、超时、发送、读完一帧。验收：不引用 `Worker` 或 `Master`；截止时间用 `ClockInterface` 的单调纳秒。CLI 截断 `-v` 时用 `BodyTruncator`。
+- [x] `bin/phpserver-rpc`：`host:port`、方法、payload、`-v` 时按截断长度打印帧、显示 request-id 和错误码。验收：`--help` 文本稳定；退出码区分成功、协议错误、网络错误。
+- [x] 测试夹具里的最小回显 socket（放在 `tests/`，不是产品代码）。验收：CLI 对这个夹具往返成功，测试不启动 `bin/worker`。
 
 ## M4 首切：单进程 worker
 
@@ -132,7 +132,6 @@ admin 的 HTTP 和完整 `/status` 留到 M6。本里程碑不另开 unix 控制
 
 - **`stop()` 从流回调返回的时机。** `SelectLoop::run` 在一拍的开头跑定时器，`stop` 标志要到定时器之后才看。流回调发生在 select 之后，所以从流回调里 `stop()`，当前读/写回调会跑完，**下一拍还会再跑一次到期定时器**，然后 `run()` 才返回。定时器回调里 `stop()` 则是本批定时器结束后就返回。`testZeroDelayTimerAddedFromACallbackRunsOnTheNextTick` 依赖现在的顺序（`first`，然后 `read`，然后 `second`）。要不要改成「流回调里一旦 `stop()`，不再跑那一拍定时器」，还没定。
 - **`EINTR` 没有直接测试。** 打断后继续循环的代码在 `SelectLoop::isInterrupted`。现有集成测试是子进程里的 `SIGTERM`，走的是没有流时的 `time_nanosleep`，不是 `stream_select` 被 `SIGUSR1` 打断。补测试或接受这个覆盖面，留到下次改循环时一起定。
-- **text-rpc/1 规格正文还没进仓库。** 帧形已经锁定（`TRPC/1`、`REQ|RES|ERR|PING|PONG`、`json`、按序回复、默认 body 1 MiB）。M3 仍应先把 `docs/protocol-text-rpc.md` 落库再写解码器；若规格和锁定条目冲突，改规格之前先改决策记录。
 - **多 worker 的指标怎么汇总。** M5 先做 IPC 快照命令。M6 默认在每次 scrape 时经 IPC 拉取。若因此拖慢 master，再改成 worker 定期推送。
 - **惊群。** v1 接受多个 worker 共享同一个 listen FD。M7 用基准记下 P99，再决定 1.0 之后要不要评估 `SO_REUSEPORT`。
 - **`inotify` 自动 reload。** M5 不做。开发机上要不要做，放到 M7 或更晚，不挡 1.0.0。

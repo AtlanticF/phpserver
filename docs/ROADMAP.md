@@ -1,6 +1,6 @@
 # 路线图
 
-v1 的蓝图。当前仓库停在 **M2**：配置、日志、时钟、异常和 `SelectLoop` 已经在树上，还不能对外提供服务。拆开的任务在 [TODO.md](../TODO.md)。
+v1 的蓝图。当前仓库停在 **M3**：配置、日志、时钟、异常、`SelectLoop`、text-rpc/1 帧编解码和阻塞客户端已经在树上。还没有 worker，不能对外提供服务。拆开的任务在 [TODO.md](../TODO.md)。
 
 本文描述要做成的运行时，不描述旧服务器的源码。旧项目只留下三件事：master 预派生 worker、`stream_select` 循环、两个业务钩子（`dealInput` / `dealProcess`）。
 
@@ -117,7 +117,7 @@ worker 和 master 各自跑一个循环。一拍的顺序是：**信号 → 定�
 
 ### 模块边界
 
-`src/` 最多两层，`Protocol/TextRpc` 是唯一的第二层。依赖向下：`bin` → `Server` → `Master` → `Worker` → {`Event`, `Protocol`, `Ipc`, `Log`, `Metrics`} → `Support`。`Protocol` 和 `Support` 不依赖其它模块。`Client` 只依赖 `Protocol`。`examples/`、`benchmarks/`、`tests/` 只依赖 `src/`，`src/` 不依赖它们。`Admin` 和 `RateLimit` 可以关掉，核心照常跑。
+`src/` 最多两层，`Protocol/TextRpc` 是唯一的第二层。依赖向下：`bin` → `Server` → `Master` → `Worker` → {`Event`, `Protocol`, `Ipc`, `Log`, `Metrics`} → `Support`。`Protocol` 只依赖 `Exception`。`Support` 不依赖其它模块。`Client` 依赖 `Protocol`、`Exception` 和 `Support`（调用截止时间用单调纳秒）；CLI 用 `Log\BodyTruncator` 截断 `-v` 的帧。`examples/`、`benchmarks/`、`tests/` 只依赖 `src/`，`src/` 不依赖它们。`Admin` 和 `RateLimit` 可以关掉，核心照常跑。
 
 已经落地的标注以源码为准：
 
@@ -130,6 +130,10 @@ worker 和 master 各自跑一个循环。一拍的顺序是：**信号 → 定�
 | `StdoutLogger`、`BodyTruncator` | `@internal` |
 | `Config`、`ConfigLoader`、`WorkerConfig`、`LogConfig`、`AdminConfig` | `@internal`（公开的是配置键，不是这些类） |
 | `ClockInterface`、`SystemClock` | `@internal` |
+| `ProtocolInterface`、`ErrorCode` | `@api` |
+| `FrameDecoder`、`FrameEncoder`、`JsonCodec`、帧类型 | `@internal` |
+| `Client`、`Response`、`RpcError`、`NetworkException` | `@api` |
+| `Console` | `@internal`（公开的是 CLI 参数和退出码） |
 
 还没写的模块按下面预定。解析细节、进程实现、指标渲染类保持 `@internal`；指标**名**、admin **路径**、配置**键**、CLI 参数是公开契约。
 
@@ -137,8 +141,6 @@ worker 和 master 各自跑一个循环。一拍的顺序是：**信号 → 定�
 |----------|----------|
 | `src/Server.php` | 类本身 `@api` |
 | `src/Worker/` | `WorkerInterface`、`AbstractWorker`、`RpcWorker` 是业务继承面 |
-| `src/Protocol/`、`src/Protocol/TextRpc/` | `ProtocolInterface` 与 `ErrorCode`；`FrameDecoder` / `FrameEncoder` 为 `@internal` |
-| `src/Client/` | 客户端 `@api` |
 | `src/RateLimit/` | `LimiterInterface` `@api` |
 | `src/Master/`、`src/Ipc/`、`src/Admin/`、`src/Metrics/`、`src/Support/` | `@internal` |
 
@@ -152,13 +154,13 @@ worker 和 master 各自跑一个循环。一拍的顺序是：**信号 → 定�
 |--------|------|----------|------|------|
 | M1 | 骨架、工具链、基础件 | [Config](../src/Config/)、[Log](../src/Log/)、[Support](../src/Support/)、[Exception](../src/Exception/)、[配置说明](configuration.md)、[CI](../.github/workflows/ci.yml) | `composer test` / `analyse` / `cs` 可跑；校验失败抛 `ConfigException`；JSON 日志行含 `ts`、`level`，有 request-id 时含 `request_id` | ✅ |
 | M2 | 唯一的事件循环 | [LoopInterface](../src/Event/LoopInterface.php)、[SelectLoop](../src/Event/SelectLoop.php)、[Timer](../src/Event/Timer.php)、[TimerQueue](../src/Event/TimerQueue.php)、[事件循环说明](event-loop.md) | 空跑一轮无 `TypeError`；无占位 FD；定时器用单调纳秒；信号回调在循环线程执行 | ✅ |
-| M3 | 线协议与官方客户端 | `docs/protocol-text-rpc.md`、`src/Protocol/`、`src/Protocol/TextRpc/`、`src/Client/`、`bin/phpserver-rpc` | 半包、粘包、超长、非法 UTF-8 有确定结果；CLI 对测试夹具往返成功 | ⏳ |
+| M3 | 线协议与官方客户端 | [protocol-text-rpc.md](protocol-text-rpc.md)、[Protocol](../src/Protocol/)、[TextRpc](../src/Protocol/TextRpc/)、[Client](../src/Client/)、[bin/phpserver-rpc](../bin/phpserver-rpc) | 半包、粘包、超长、非法 UTF-8 有确定结果；CLI 对测试夹具往返成功 | ✅ |
 | M4 | 首切：单进程 worker | `src/Worker/`、`examples/Echo/`、`examples/Rpc/`、`bin/worker`、`docs/worker-contract.md`、`docs/debugging.md` | Echo 的 HTTP 明文返回 `hello`；RPC 往返带 request-id；Handler 抛异常时进程不退出 | ⏳ |
 | M5 | prefork 生产形态 | `src/Master/`、`src/Ipc/`、`src/Server.php`、`bin/serverd`、`docs/operations.md` | N 个 worker；崩溃后拉起；`SIGTERM` 排空；reload 期间请求不失败；`max_requests` 默认关闭 | ⏳ |
 | M6 | K8s 探针与指标 | `src/Admin/`、Prometheus 文本、`src/RateLimit/` | admin 上 `/healthz` 与 `/readyz` 为 200；`SIGTERM` 后 `/readyz` 先失败；业务端口不认这些路径 | ⏳ |
 | M7 | 压测、镜像、文档，发布 1.0.0 | `benchmarks/`、根目录 `Dockerfile`（`dev` 已可用，`runtime` 在本里程碑收尾）、`deploy/k8s/`、五份文档定稿 | 镜像非 root；`docker stop` 能排空；README 五条命令内跑起 Echo | ⏳ |
 
-M1 的三个 `bin/` 脚本仍是占位：打印 `not implemented`，状态码 1。`config/server.echo.php` 里的 `EchoWorker` 只是通过校验的类名，类要到 M4 才有。
+`bin/serverd` 和 `bin/worker` 仍是占位：打印 `not implemented`，状态码 1。`bin/phpserver-rpc` 已经能对 text-rpc/1 服务发一帧。`config/server.echo.php` 里的 `EchoWorker` 只是通过校验的类名，类要到 M4 才有。
 
 各里程碑不包含的内容，以及文件级任务，写在 [TODO.md](../TODO.md)。
 
