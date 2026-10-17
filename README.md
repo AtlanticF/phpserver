@@ -40,6 +40,18 @@ composer show --tree
 
 `composer show --no-dev --name-only` 应为空。修正代码风格用 `composer cs:fix`。
 
+## 用 Docker 开始
+
+默认镜像是开发目标，跑测试、静态分析和代码风格。`runtime` 还不能接连接：`bin/serverd` 打印 `not implemented` 并以状态码 1 退出，留到 M5 再监听。
+
+```sh
+docker build --target dev -t phpserver:dev .
+docker run --rm phpserver:dev
+docker compose run --rm dev sh
+```
+
+`docker compose run --rm dev` 同样跑这三项检查，并把当前目录挂进容器（`vendor` 用镜像里的）。进 shell 用上面的第三条。
+
 ## 事件循环
 
 [`docs/event-loop.md`](docs/event-loop.md)。`SelectLoop` 用 `stream_select`；没有流时睡眠，不放占位 FD。

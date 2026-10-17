@@ -1,0 +1,10 @@
+services:
+  dev:
+    image: phpserver:dev
+    build:
+      context: .
+      target: dev
+    volumes:
+      - .:/app
+      # Keep the image's vendor when the source tree is mounted over /app.
+      - /app/vendor

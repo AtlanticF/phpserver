@@ -156,7 +156,7 @@ worker 和 master 各自跑一个循环。一拍的顺序是：**信号 → 定�
 | M4 | 首切：单进程 worker | `src/Worker/`、`examples/Echo/`、`examples/Rpc/`、`bin/worker`、`docs/worker-contract.md`、`docs/debugging.md` | Echo 的 HTTP 明文返回 `hello`；RPC 往返带 request-id；Handler 抛异常时进程不退出 | ⏳ |
 | M5 | prefork 生产形态 | `src/Master/`、`src/Ipc/`、`src/Server.php`、`bin/serverd`、`docs/operations.md` | N 个 worker；崩溃后拉起；`SIGTERM` 排空；reload 期间请求不失败；`max_requests` 默认关闭 | ⏳ |
 | M6 | K8s 探针与指标 | `src/Admin/`、Prometheus 文本、`src/RateLimit/` | admin 上 `/healthz` 与 `/readyz` 为 200；`SIGTERM` 后 `/readyz` 先失败；业务端口不认这些路径 | ⏳ |
-| M7 | 压测、镜像、文档，发布 1.0.0 | `benchmarks/`、`deploy/Dockerfile`、`deploy/k8s/`、五份文档定稿 | 镜像非 root；`docker stop` 能排空；README 五条命令内跑起 Echo | ⏳ |
+| M7 | 压测、镜像、文档，发布 1.0.0 | `benchmarks/`、根目录 `Dockerfile`（`dev` 已可用，`runtime` 在本里程碑收尾）、`deploy/k8s/`、五份文档定稿 | 镜像非 root；`docker stop` 能排空；README 五条命令内跑起 Echo | ⏳ |
 
 M1 的三个 `bin/` 脚本仍是占位：打印 `not implemented`，状态码 1。`config/server.echo.php` 里的 `EchoWorker` 只是通过校验的类名，类要到 M4 才有。
 

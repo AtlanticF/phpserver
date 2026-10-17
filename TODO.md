@@ -113,7 +113,8 @@ admin 的 HTTP 和完整 `/status` 留到 M6。本里程碑不另开 unix 控制
 - [ ] `benchmarks/rpc/bench.php`，复用 `src/Client`。验收：脚本不进 PSR-4，能对一个已启动的 Rpc worker 打出延迟数字。
 - [ ] `benchmarks/legacy/`：和旧服务器同机对照的步骤。验收：仓库里不放入旧源码；旧的跑不起来时，报告写明跳过。
 - [ ] CI 里加一段短时基准冒烟。验收：只检查跑得通，不设 QPS 门槛，不挡住日常推送；完整压测留在手工或定时任务。
-- [ ] `deploy/Dockerfile`：PHP 8.4、`linux/amd64` 与 `linux/arm64`、非 root `USER`、前台 PID 1、`--foreground`。验收：镜像里 `id -u` 不是 0；`docker stop` 的日志能看到排空。
+- [x] 开发镜像提前落地：仓库根 `Dockerfile` 的 `dev` 目标（含 dev 依赖，默认 CMD 跑 `composer test`、`analyse`、`cs`）、`.dockerignore`、`compose.yaml`。验收：`docker run --rm phpserver:dev` 三项检查通过。
+- [ ] 运行时镜像在 M7 收尾：多架构 `linux/amd64` 与 `linux/arm64`、`--foreground` 真正当 PID 1、`docker stop` 的日志能看到排空。验收：现在的 `--target runtime` 只是占位（uid 10001、`STOPSIGNAL SIGTERM`、入口 `bin/serverd` 仍打印 `not implemented` 并退出 1）；M7 再验证优雅退出。
 - [ ] `deploy/k8s/`：Deployment 的 liveness 指 admin `/healthz`、readiness 指 `/readyz`，grace period 按 `docs/operations.md`；Service 只暴露业务端口；NetworkPolicy 和 Prometheus 注解可选。验收：在 kind 或 minikube 里 apply 之后 Pod Ready，滚动更新期间 RPC 连续调用无失败。
 - [ ] 五份文档定稿：`docs/protocol-text-rpc.md`、`docs/worker-contract.md`、`docs/configuration.md`、`docs/operations.md`、`docs/debugging.md`。验收：和实现不一致的句子改掉，README 快速开始不超过 5 条命令就能看到 Echo 的 `hello`。
 - [ ] `CHANGELOG.md` 写入 `1.0.0` 和 `text-rpc/1`。验收：两栏都有条目，协议版本不跟库的补丁号绑死。

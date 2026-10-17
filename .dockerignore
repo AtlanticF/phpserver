@@ -1,0 +1,11 @@
+.git
+.github
+.idea
+.vscode
+.phpunit.cache
+.php-cs-fixer.cache
+vendor
+var
+uploads
+*.swp
+.DS_Store
