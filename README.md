@@ -12,6 +12,9 @@
 
 还没有 text-rpc 编解码、worker、master、admin 端口。`bin/serverd`、`bin/worker`、`bin/phpserver-rpc` 只是占位，打印 `not implemented` 并以状态码 1 退出。目前不能对外提供服务。
 
+蓝图：[docs/ROADMAP.md](docs/ROADMAP.md)。
+待办：[TODO.md](TODO.md)。
+
 ## Origins / 来源
 
 This repository is an independent, clean-room rewrite inspired by the architecture of the original PHPServer (v1.3.4, from the PHP 5.6 era). That server was a multi-process PHP RPC server developed and used in production at Jumei (聚美优品). None of its source, configuration, or documentation is included here. What is kept is the original idea: a slight master that preforks workers, a select-based event loop, and a two-hook worker contract (`dealInput` / `dealProcess`). The names "PHPServer" and "Jumei" describe provenance only; this project is not affiliated with or endorsed by Jumei. See [NOTICE](NOTICE).
