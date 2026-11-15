@@ -26,7 +26,7 @@ return [
         'Rpc' => [
             'listen' => '127.0.0.1:9000',
             'worker_class' => 'PhpServer\\Examples\\Rpc\\RpcWorker',
-            'bootstrap' => '',
+            'bootstrap' => 'examples/Rpc/bootstrap.php',
             'child_count' => 4,
             'backlog' => 511,
             'max_connections' => 1024,

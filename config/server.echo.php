@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 /**
  * Minimal Echo worker. Defaults fill every key that is not set here.
- * The class is not shipped until M4; M1 only checks that the name is present.
  */
 return [
     'admin' => [
