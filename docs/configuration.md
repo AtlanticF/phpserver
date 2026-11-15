@@ -1,6 +1,6 @@
 # 配置
 
-M1 只负责把配置读进来并校验。进程、端口监听和 admin HTTP 都还没实现；这里的键是后面里程碑要遵守的契约。
+配置加载只负责把文件读进来并校验。`bin/worker` 会按其中一名 worker 的 `listen` 接连接。admin HTTP 还没实现；下面的键仍是后面里程碑要遵守的契约。
 
 配置文件是一个返回关联数组的 PHP 文件。环境变量在文件值之后应用，同名时环境变量优先。
 
@@ -130,7 +130,9 @@ admin 关闭时不参加这次比较。
 
 ### `worker_class`
 
-非空的类名字符串，例如 `PhpServer\Examples\Echo\EchoWorker`。M1 不检查这个类是否已经加载；后面的里程碑在真正启动时再加载。
+非空的类名字符串，例如 `PhpServer\Examples\Echo\EchoWorker`。加载配置时不检查这个类是否存在。`bin/worker` 启动时才加载它：类必须已能自动加载，并且是 `AbstractWorker` 的具体子类。
+
+`bootstrap` 是相对当前工作目录的 PHP 文件路径，默认空。文件可以返回一个闭包，参数是刚构造好的 worker；什么都不返回也可以。`examples/Rpc/bootstrap.php` 用这个闭包登记 `Echo.say`。
 
 ## 不认识的环境变量
 

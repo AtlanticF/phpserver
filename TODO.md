@@ -1,6 +1,6 @@
 # TODO
 
-对照 [docs/ROADMAP.md](docs/ROADMAP.md)。M1、M2、M3 的勾选以仓库里的代码和测试为准。M4 起还没开始。
+对照 [docs/ROADMAP.md](docs/ROADMAP.md)。M1、M2、M3、M4 的勾选以仓库里的代码和测试为准。M5 起还没开始。
 
 每个里程碑结束时，PHP 8.3 和 8.4 上 `composer test`、`composer analyse`、`composer cs` 都要过，`require` 里仍然没有第三方包。
 
@@ -10,7 +10,7 @@
 - [x] PHPUnit 11 的 Unit / Integration 两套件、PHPStan level max、php-cs-fixer `@PER-CS`。验收：`phpunit.xml.dist`、`phpstan.neon`、`.php-cs-fixer.dist.php` 与 CI 一致。
 - [x] `.github/workflows/ci.yml` 在 PHP 8.3 和 8.4 上跑 validate、无运行时包、`cs`、`analyse`、`test`。验收：工作流包含这两档，且 `fail-fast` 为 false。
 - [x] `CHANGELOG.md` 把库和 text-rpc 协议分成两栏；`LICENSE` 为 MIT。验收：两栏都在；协议实现记在协议栏，不跟库的补丁号绑死。
-- [x] `bin/serverd`、`bin/worker`、`bin/phpserver-rpc` 在 M1 只是占位。验收：`tests/Integration/Bin/PlaceholderBinTest.php` 仍断言 `serverd` 和 `worker` 打印 `not implemented` 并以状态码 1 退出。`phpserver-rpc` 从 M3 起是客户端。
+- [x] `bin/serverd`、`bin/worker`、`bin/phpserver-rpc` 在 M1 只是占位。验收：`tests/Integration/Bin/PlaceholderBinTest.php` 仍断言 `serverd` 打印 `not implemented` 并以状态码 1 退出。`phpserver-rpc` 从 M3 起是客户端，`worker` 从 M4 起是单进程服务。
 - [x] `src/Exception/`：`PhpServerException` 标记接口，以及 `ConfigException`、`ProtocolException`、`RateLimitedException`、`ProcessException`。验收：`tests/Unit/Exception/ExceptionHierarchyTest.php`；`RateLimitedException` 默认码 `-32001`。
 - [x] `src/Support/ClockInterface.php`、`src/Support/SystemClock.php`，测试时钟在 `tests/Support/MutableClock.php`。验收：`tests/Unit/Support/SystemClockTest.php` 里改墙钟不改变 `monotonic()`。
 - [x] `src/Config/`：PHP 数组文件、`PHPSERVER_*` 覆盖、启动前校验。验收：`tests/Unit/Config/ConfigLoaderTest.php` 中环境变量压过文件；未知键只 warning。
@@ -56,19 +56,19 @@
 
 没有 master、fork、IPC、admin 端口、指标渲染、限流和 `max_requests`。那些属于 M5 / M6。
 
-- [ ] `src/Worker/WorkerInterface.php`。验收：业务契约只有 `dealInput` 和 `dealProcess`。
-- [ ] `src/Worker/AbstractWorker.php`：`accept`、连接表、读缓冲上限、`recv_timeout` / `send_timeout` / `idle_timeout`、`max_connections`、持久连接在一帧结束后清缓冲。验收：超过 `max_connections` 时拒绝并让 `conn_rejected` 加一，不无限攒缓冲。
-- [ ] 未捕获的 `Throwable` 变成协议错误，worker 进程不退出。验收：错误帧带 `ErrorCode::InternalError` 和同一个 request-id，日志有对应的 error 行。
-- [ ] `src/Worker/RpcWorker.php`。验收：解析 text-rpc/1，按方法调用 Handler，再把结果编码成 `RES` 或 `ERR`；`PING` 回 `PONG`。
-- [ ] `src/Metrics/` 只计数，不渲染：`accept`、`requests`、`errors`、`conn_rejected`、`idle_timeout`。验收：计数器可在进程内读到，没有 Prometheus 文本。
-- [ ] `examples/Echo/`（`EchoWorker`）。验收：`php bin/worker --config config/server.echo.php Echo` 之后，`curl` 业务端口得到明文 `hello`。
-- [ ] `examples/Rpc/`：`RpcWorker` 子类、一个 Handler、`bootstrap`。验收：`bin/phpserver-rpc` 打到 `config/server.example.php` 的 `Rpc`，结果正确，CLI 打出 request-id。
-- [ ] `bin/worker`：无 master、前台、日志到 stdout、`-v`、`--config`、worker 名。验收：占位脚本被换掉，不再无条件 `exit(1)`。
-- [ ] 超过 `max_frame_bytes` 的帧。验收：返回协议错误并关闭连接，计数加一。
-- [ ] 只发半包然后停住的客户端。验收：到 `recv_timeout` 后关闭，不挂住进程。
-- [ ] `tests/Integration/` 用子进程覆盖上面四条：Echo 的 `hello`、RPC 成功、Handler 抛异常、超长帧或半包超时。验收：PHP 8.4 下无 deprecation。
-- [ ] `docs/worker-contract.md`。验收：写明两个钩子、连接何时关闭、异常如何变成错误帧。
-- [ ] `docs/debugging.md` 至少三条能复制运行的配方（单 worker、打一帧 RPC、跟着 request-id 看日志）。验收：按文档命令能跑通。
+- [x] `src/Worker/WorkerInterface.php`。验收：业务契约只有 `dealInput` 和 `dealProcess`。
+- [x] `src/Worker/AbstractWorker.php`：`accept`、连接表、读缓冲上限、`recv_timeout` / `send_timeout` / `idle_timeout`、`max_connections`、持久连接在一帧结束后清缓冲。验收：超过 `max_connections` 时拒绝并让 `conn_rejected` 加一，不无限攒缓冲。
+- [x] 未捕获的 `Throwable` 变成协议错误，worker 进程不退出。验收：错误帧带 `ErrorCode::InternalError` 和同一个 request-id，日志有对应的 error 行。
+- [x] `src/Worker/RpcWorker.php`。验收：解析 text-rpc/1，按方法调用 Handler，再把结果编码成 `RES` 或 `ERR`；`PING` 回 `PONG`。
+- [x] `src/Metrics/` 只计数，不渲染：`accept`、`requests`、`errors`、`conn_rejected`、`idle_timeout`。验收：计数器可在进程内读到，没有 Prometheus 文本。
+- [x] `examples/Echo/`（`EchoWorker`）。验收：`php bin/worker --config config/server.echo.php Echo` 之后，`curl` 业务端口得到明文 `hello`。
+- [x] `examples/Rpc/`：`RpcWorker` 子类、一个 Handler、`bootstrap`。验收：`bin/phpserver-rpc` 打到 `config/server.example.php` 的 `Rpc`，结果正确，CLI 打出 request-id。
+- [x] `bin/worker`：无 master、前台、日志到 stdout、`-v`、`--config`、worker 名。验收：占位脚本被换掉，不再无条件 `exit(1)`。
+- [x] 超过 `max_frame_bytes` 的帧。验收：返回协议错误并关闭连接，计数加一。
+- [x] 只发半包然后停住的客户端。验收：到 `recv_timeout` 后关闭，不挂住进程。
+- [x] `tests/Integration/` 用子进程覆盖上面四条：Echo 的 `hello`、RPC 成功、Handler 抛异常、超长帧或半包超时。验收：PHP 8.4 下无 deprecation。
+- [x] `docs/worker-contract.md`。验收：写明两个钩子、连接何时关闭、异常如何变成错误帧。
+- [x] `docs/debugging.md` 至少三条能复制运行的配方（单 worker、打一帧 RPC、跟着 request-id 看日志）。验收：按文档命令能跑通。
 
 ## M5 master 与 `bin/serverd`
 

@@ -1,12 +1,12 @@
-# Default target is `dev` (the last stage). The server cannot accept
-# connections yet, so the image you get from `docker build .` runs the checks.
+# Default target is `dev` (the last stage). `docker build .` runs the checks.
+# `bin/worker` can serve one process. `runtime` still starts `bin/serverd`,
+# which prints "not implemented" and exits 1 until M5.
 #
 #   docker build --target dev -t phpserver:dev .
 #   docker build --target runtime -t phpserver:runtime .
 #
-# `runtime` is a placeholder until M5. `bin/serverd` prints "not implemented"
-# and exits 1. The entrypoint, user, ports, and PHPSERVER_* variables stay as
-# they will be when the process really listens.
+# The runtime entrypoint, user, ports, and PHPSERVER_* variables stay as
+# they will be when `bin/serverd` really listens.
 
 FROM php:8.4-cli-alpine AS php-base
 

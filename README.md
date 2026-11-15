@@ -2,7 +2,7 @@
 
 轻量的多进程 text RPC 服务器，面向 Linux 和 Kubernetes。这是 2016 年 PHPServer 的干净重写：保留 prefork 和两个业务钩子的方向，不携带旧协议、旧品牌或运行时依赖。
 
-**当前状态：M3。** 仓库里有骨架、基础件、事件循环，以及 text-rpc/1 的帧编解码和阻塞客户端：
+**当前状态：M4。** 仓库里有骨架、基础件、事件循环、text-rpc/1 的帧编解码和阻塞客户端，以及一个前台 worker：
 
 - 配置：PHP 数组文件、`PHPSERVER_*` 环境变量覆盖、启动前校验
 - 日志：自带 `LoggerInterface`（方法签名与 PSR-3 同形）、文本或 JSON 行、request-id
@@ -11,8 +11,9 @@
 - 事件循环：`LoopInterface` / `SelectLoop`（流、定时器、信号）
 - 协议：text-rpc/1 帧（魔数 `TRPC/1`）和 JSON body
 - 客户端：阻塞的 `Client`，以及 `bin/phpserver-rpc`
+- 服务：`bin/worker` 前台跑一个进程，Echo 回明文 `hello`，Rpc 示例接 text-rpc/1
 
-还没有 worker、master、admin 端口。`bin/serverd` 和 `bin/worker` 仍是占位，打印 `not implemented` 并以状态码 1 退出。目前不能对外提供服务。
+还没有 master 和 admin 端口。`bin/serverd` 仍是占位，打印 `not implemented` 并以状态码 1 退出。一组进程还起不来。
 
 蓝图：[docs/ROADMAP.md](docs/ROADMAP.md)。
 待办：[TODO.md](TODO.md)。
@@ -69,7 +70,27 @@ printf 'TRPC/1 REQ 1 json %d\n%s\n' "$(printf %s "$body" | wc -c)" "$body" | nc 
 bin/phpserver-rpc 127.0.0.1:9000 Echo.say '["hi"]' -v
 ```
 
-`-v` 把收发的帧打到 stderr，body 截到 256 字节，并打印 trace-id。`--raw` 原样输出响应 body。退出码：`0` 成功，`1` RPC 错误，`2` 协议错误，`3` 网络错误，`64` 用法错误。这一里程碑没有产品服务端；测试用 `tests/Fixture` 里的回显套接字，不启动 `bin/worker`。
+`-v` 把收发的帧打到 stderr，body 截到 256 字节，并打印 trace-id。`--raw` 原样输出响应 body。退出码：`0` 成功，`1` RPC 错误，`2` 协议错误，`3` 网络错误，`64` 用法错误。协议测试夹具仍在 `tests/Fixture`，不依赖 `bin/worker`。
+
+## 单进程 worker
+
+契约在 [`docs/worker-contract.md`](docs/worker-contract.md)，三条能直接复制的命令在 [`docs/debugging.md`](docs/debugging.md)。
+
+Echo，body 是 `hello`：
+
+```sh
+php bin/worker --config config/server.echo.php Echo
+curl -sS http://127.0.0.1:9000/
+```
+
+Rpc 示例（`Echo.say` 由 `examples/Rpc/bootstrap.php` 登记）。先停掉上面的 Echo，它也占用 9000：
+
+```sh
+php bin/worker --config config/server.example.php Rpc
+bin/phpserver-rpc 127.0.0.1:9000 Echo.say '["hi"]' -v
+```
+
+`bin/worker` 把日志打到 stdout。`-v` 把级别降到 debug。`--config`（或 `-c`）后面跟一个 worker 名。退出码：`0` 被信号停掉，`1` 配置或运行错误，`64` 用法错误。
 
 ## 事件循环
 
