@@ -1,6 +1,6 @@
 # TODO
 
-对照 [docs/ROADMAP.md](docs/ROADMAP.md)。M1 到 M5 的勾选以仓库里的代码和测试为准。M6 起还没开始。
+对照 [docs/ROADMAP.md](docs/ROADMAP.md)。M1 到 M6 的勾选以仓库里的代码和测试为准。M7 起还没开始。
 
 每个里程碑结束时，PHP 8.3 和 8.4 上 `composer test`、`composer analyse`、`composer cs` 都要过，`require` 里仍然没有第三方包。
 
@@ -92,17 +92,17 @@ admin 的 HTTP 和完整 `/status` 留到 M6。本里程碑不另开 unix 控制
 
 不做 OpenTelemetry、仪表盘、mTLS / RBAC，也不做外部配额服务。
 
-- [ ] `src/Admin/`：listen 在 master 里，默认 `127.0.0.1`，可选 token；只接受 GET，有读超时和大小上限。验收：慢客户端占不住这个 FD。
-- [ ] `GET /healthz`。验收：master 活着时 200；它表示进程还在，不表示能接业务。
-- [ ] `GET /readyz`。验收：已经 listen 且有就绪 worker 时 200；对 master 发 `SIGTERM` 后、listen 关掉之前就已经不是 200。
-- [ ] `GET /status`。验收：JSON 里有版本、uptime、每个 worker 的 pid / 状态 / 请求计数；FD 只给计数，不逐个 dump。
-- [ ] `GET /metrics`：Prometheus 文本，前缀 `phpserver_`，至少包括 accept、requests、errors、`worker_restarts`、`conn_rejected`、rejected、degraded、`drain_timeout`。验收：100 个请求里 5 个抛异常时，`phpserver_requests_total` 和 errors 对得上；有 `promtool` 时 `check metrics` 通过。
-- [ ] 业务端口上的 `/healthz` 等路径不当成 admin。验收：打到业务端口得到协议错误或 Echo/RPC 的正常处理，而不是探针正文。
-- [ ] 关掉 admin 和 metrics 之后 Echo / RPC 仍工作。验收：`admin.enabled=false` 时不 listen admin 端口，业务请求成功。
-- [ ] `src/RateLimit/LimiterInterface.php`，在 `dealProcess` **之前**调用，返回放行、拒绝或降级。验收：默认实现什么都不做，热路径上没有额外判定。
-- [ ] 一个标准库 token bucket 示例，默认关闭。验收：打开并压低速率时，客户端收到 `-32001`，`rejected` 增加；关闭时该计数保持 0。
-- [ ] `bin/serverd status` 改为请求本机 admin `/status` 并格式化。验收：不再只靠 PID 文件猜测。
-- [ ] 把探针、scrape 和一条 admin 配方写进 `docs/operations.md`、`docs/debugging.md`。验收：文档里的 `curl` 指向 admin 端口，不是业务端口。
+- [x] `src/Admin/`：listen 在 master 里，默认 `127.0.0.1`，可选 token；只接受 GET，有读超时和大小上限。验收：慢客户端占不住这个 FD。
+- [x] `GET /healthz`。验收：master 活着时 200；它表示进程还在，不表示能接业务。
+- [x] `GET /readyz`。验收：已经 listen 且有就绪 worker 时 200；对 master 发 `SIGTERM` 后、listen 关掉之前就已经不是 200。
+- [x] `GET /status`。验收：JSON 里有版本、uptime、每个 worker 的 pid / 状态 / 请求计数；FD 只给计数，不逐个 dump。
+- [x] `GET /metrics`：Prometheus 文本，前缀 `phpserver_`，至少包括 accept、requests、errors、`worker_restarts`、`conn_rejected`、rejected、degraded、`drain_timeout`。验收：100 个请求里 5 个抛异常时，`phpserver_requests_total` 和 errors 对得上；有 `promtool` 时 `check metrics` 通过。
+- [x] 业务端口上的 `/healthz` 等路径不当成 admin。验收：打到业务端口得到协议错误或 Echo/RPC 的正常处理，而不是探针正文。
+- [x] 关掉 admin 和 metrics 之后 Echo / RPC 仍工作。验收：`admin.enabled=false` 时不 listen admin 端口，业务请求成功。
+- [x] `src/RateLimit/LimiterInterface.php`，在 `dealProcess` **之前**调用，返回放行、拒绝或降级。验收：默认实现什么都不做，热路径上没有额外判定。
+- [x] 一个标准库 token bucket 示例，默认关闭。验收：打开并压低速率时，客户端收到 `-32001`，`rejected` 增加；关闭时该计数保持 0。
+- [x] `bin/serverd status` 改为请求本机 admin `/status` 并格式化。验收：不再只靠 PID 文件猜测。
+- [x] 把探针、scrape 和一条 admin 配方写进 `docs/operations.md`、`docs/debugging.md`。验收：文档里的 `curl` 指向 admin 端口，不是业务端口。
 
 ## M7 基准、部署、1.0.0
 

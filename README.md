@@ -2,7 +2,7 @@
 
 轻量的多进程 text RPC 服务器，面向 Linux 和 Kubernetes。这是 2016 年 PHPServer 的干净重写：保留 prefork 和两个业务钩子的方向，不携带旧协议、旧品牌或运行时依赖。
 
-**当前状态：M5。** 仓库里有骨架、基础件、事件循环、text-rpc/1、阻塞客户端、前台 worker，以及 prefork master：
+**当前状态：M6。** 仓库里有骨架、基础件、事件循环、text-rpc/1、阻塞客户端、前台 worker、prefork master，以及 admin 探针：
 
 - 配置：PHP 数组文件、`PHPSERVER_*` 环境变量覆盖、启动前校验
 - 日志：自带 `LoggerInterface`（方法签名与 PSR-3 同形）、文本或 JSON 行、request-id
@@ -13,7 +13,7 @@
 - 客户端：阻塞的 `Client`，以及 `bin/phpserver-rpc`
 - 服务：`bin/worker` 前台跑一个进程；`bin/serverd` 按 `child_count` fork。Echo 回明文 `hello`，Rpc 示例接 text-rpc/1
 
-还没有 admin 端口。探针不要打到业务端口上。
+探针在 admin 口上，默认 `127.0.0.1:9100` 的 `/healthz` 和 `/readyz`。不要打到业务端口。限流默认关闭。
 
 蓝图：[docs/ROADMAP.md](docs/ROADMAP.md)。
 待办：[TODO.md](TODO.md)。

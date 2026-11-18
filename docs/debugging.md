@@ -58,3 +58,20 @@ bin/phpserver-rpc 127.0.0.1:9000 Missing.method '[]' --trace-id=demo-err -v
 ```
 
 在 worker 的 stdout 里搜 `demo-err`。
+
+## 4. 看 admin，而不是业务端口
+
+先起 master（示例配置的 admin 是 `127.0.0.1:9100`，业务是 `127.0.0.1:9000`）：
+
+```sh
+php bin/serverd start --foreground -c config/server.example.php
+```
+
+```sh
+curl -sS http://127.0.0.1:9100/healthz
+curl -sS http://127.0.0.1:9100/readyz
+curl -sS http://127.0.0.1:9100/metrics
+php bin/serverd status -c config/server.example.php
+```
+
+`/healthz` 为 `ok` 只说明 master 还在。`/readyz` 为 `ready` 才表示有 worker 在听。`status` 读的是 admin 的 `/status`。业务端口上的 `/healthz` 不是探针。

@@ -10,7 +10,8 @@
 - M2：`stream_select` 事件循环（读/写、定时器最小堆、信号）。没有流可等时用 `time_nanosleep`，不放占位 FD。
 - M3：text-rpc/1 帧编解码、阻塞客户端、`bin/phpserver-rpc`。
 - M4：单进程 worker（`dealInput` / `dealProcess`）、进程内计数器、`bin/worker`、Echo 与 Rpc 示例。
-- M5：prefork master、`bin/serverd`、worker 与 master 之间的定长 IPC。admin HTTP 还没有。
+- M5：prefork master、`bin/serverd`、worker 与 master 之间的定长 IPC。
+- M6：master 上的 admin HTTP（`/healthz`、`/readyz`、`/status`、`/metrics`）和可选的限流钩子。限流默认关闭。
 - Docker：默认开发镜像（`php:8.4-cli-alpine`）跑 `composer test`、`analyse`、`cs`。`runtime` 目标是占位，非 root（uid 10001），入口仍是 `bin/serverd`。
 
 ### text-rpc 协议

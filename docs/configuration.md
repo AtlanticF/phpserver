@@ -1,6 +1,6 @@
 # 配置
 
-配置加载只负责把文件读进来并校验。`bin/worker` 会按其中一名 worker 的 `listen` 接连接。admin HTTP 还没实现；下面的键仍是后面里程碑要遵守的契约。
+配置加载只负责把文件读进来并校验。`bin/worker` 会按其中一名 worker 的 `listen` 接连接。`bin/serverd` 在 master 里听 admin 口。下面的键是契约。
 
 配置文件是一个返回关联数组的 PHP 文件。环境变量在文件值之后应用，同名时环境变量优先。
 
@@ -44,7 +44,7 @@ PHP 文件里用真正的类型：整数用 `int`，超时用 `int` 或 `float`�
 | `user` | `''` | `PHPSERVER_USER` | 空表示不降权。否则是用户名或数字 uid |
 | `group` | `''` | `PHPSERVER_GROUP` | 同上，组名或 gid |
 | `log` | 见下表 | — | 日志 |
-| `admin` | 见下表 | — | 独立 admin 口。M1 只校验，不监听 |
+| `admin` | 见下表 | — | 独立 admin 口，由 master 监听 |
 | `workers` | 必填，至少一个 | — | worker 名 => 选项。名字必须匹配 `[A-Za-z][A-Za-z0-9]*`，且大小写不能互相冲突 |
 
 ## 日志 `log`
@@ -75,7 +75,7 @@ request-id 字符集与 text-rpc/1 的 trace-id 相同：`[A-Za-z0-9._-]{1,64}`�
 | `token` | `''` | `PHPSERVER_ADMIN_TOKEN` |
 | `metrics` | `true` | `PHPSERVER_ADMIN_METRICS` |
 
-`enabled` 为 false 时不把 admin 地址算进端口冲突（进程不会听这个口）。地址格式错误仍然会失败。
+`enabled` 为 false 时不把 admin 地址算进端口冲突，master 也不听这个口。地址格式错误仍然会失败。`token` 为空表示不校验；否则请求要带 `Authorization: Bearer <token>`。`metrics` 为 false 时没有 `/metrics`。
 
 ## Worker
 
