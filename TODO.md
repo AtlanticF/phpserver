@@ -1,6 +1,6 @@
 # TODO
 
-对照 [docs/ROADMAP.md](docs/ROADMAP.md)。M1、M2、M3、M4 的勾选以仓库里的代码和测试为准。M5 起还没开始。
+对照 [docs/ROADMAP.md](docs/ROADMAP.md)。M1 到 M5 的勾选以仓库里的代码和测试为准。M6 起还没开始。
 
 每个里程碑结束时，PHP 8.3 和 8.4 上 `composer test`、`composer analyse`、`composer cs` 都要过，`require` 里仍然没有第三方包。
 
@@ -10,7 +10,7 @@
 - [x] PHPUnit 11 的 Unit / Integration 两套件、PHPStan level max、php-cs-fixer `@PER-CS`。验收：`phpunit.xml.dist`、`phpstan.neon`、`.php-cs-fixer.dist.php` 与 CI 一致。
 - [x] `.github/workflows/ci.yml` 在 PHP 8.3 和 8.4 上跑 validate、无运行时包、`cs`、`analyse`、`test`。验收：工作流包含这两档，且 `fail-fast` 为 false。
 - [x] `CHANGELOG.md` 把库和 text-rpc 协议分成两栏；`LICENSE` 为 MIT。验收：两栏都在；协议实现记在协议栏，不跟库的补丁号绑死。
-- [x] `bin/serverd`、`bin/worker`、`bin/phpserver-rpc` 在 M1 只是占位。验收：`tests/Integration/Bin/PlaceholderBinTest.php` 仍断言 `serverd` 打印 `not implemented` 并以状态码 1 退出。`phpserver-rpc` 从 M3 起是客户端，`worker` 从 M4 起是单进程服务。
+- [x] `bin/serverd`、`bin/worker`、`bin/phpserver-rpc` 在 M1 只是占位。验收：三个脚本都已换成实现。`phpserver-rpc` 从 M3 起是客户端，`worker` 从 M4 起是单进程服务，`serverd` 从 M5 起是 prefork master。`tests/Integration/Bin/PlaceholderBinTest.php` 断言 `serverd --help` 不再打印 `not implemented`。
 - [x] `src/Exception/`：`PhpServerException` 标记接口，以及 `ConfigException`、`ProtocolException`、`RateLimitedException`、`ProcessException`。验收：`tests/Unit/Exception/ExceptionHierarchyTest.php`；`RateLimitedException` 默认码 `-32001`。
 - [x] `src/Support/ClockInterface.php`、`src/Support/SystemClock.php`，测试时钟在 `tests/Support/MutableClock.php`。验收：`tests/Unit/Support/SystemClockTest.php` 里改墙钟不改变 `monotonic()`。
 - [x] `src/Config/`：PHP 数组文件、`PHPSERVER_*` 覆盖、启动前校验。验收：`tests/Unit/Config/ConfigLoaderTest.php` 中环境变量压过文件；未知键只 warning。
@@ -74,19 +74,19 @@
 
 admin 的 HTTP 和完整 `/status` 留到 M6。本里程碑不另开 unix 控制套接字，也不做 `SO_REUSEPORT`。
 
-- [ ] `src/Master/`：master 统一 `listen`，按 `child_count` fork，子进程关掉无关 FD，只留自己的 listen 和 IPC。验收：非 root 下 `bin/serverd start --foreground -c config/server.example.php` 起 N 个进程，`ps` 能看到进程标题。
-- [ ] `user` / `group` 只在以 root 启动时 `setgid` / `setuid`。验收：普通用户启动时跳过降权，不因此失败。
-- [ ] `SIGCHLD` 在循环里收尸，不在信号处理器里 fork。验收：`kill -9` 一个 worker 后约 1 秒内补齐，`worker_restarts` 加一。
-- [ ] 心跳 `ping` / `pong`，错过上限则强杀并拉起。验收：强杀记入强制回收，不和正常 drain 混用同一个计数。
-- [ ] `SIGTERM` / `SIGINT`：停止 accept，等在途请求，超时再强杀。验收：慢请求能完成，进程树退出码 0；超过排空时间则强杀并让 `drain_timeout` 加一。
-- [ ] `SIGUSR2` 或 `reload`：逐个换 worker。验收：替换期间并发的 `bin/phpserver-rpc` 没有失败。
-- [ ] `max_requests` / `max_work_time` 默认 `0`（关）。打开时先排空再退出，并加上随机 `recycle_stagger`。验收：`max_requests=50` 时该 worker 在第 50 个请求完成后被换掉；默认配置从不触发。
-- [ ] master 死亡时 worker 自己退出。验收：`kill -9` master 之后，心跳超时内没有残留 worker。
-- [ ] `src/Ipc/`：unix socketpair、定长头、命令 enum（`stop`、`drain`、status、metrics 快照、`ping`），不用 `serialize`。验收：一条命令可以往返，body 不是 PHP 序列化串。
-- [ ] `src/Server.php`：`Server::fromConfig(...)->run()`，标 `@api`。验收：`bin/serverd` 和以后的调用方从这个门面进去。
-- [ ] `bin/serverd`：`start` / `stop` / `restart` / `reload` / `status`，以及 `--foreground` 和 daemon。验收：PID 文件默认不写；`status` 在本里程碑只报告 master 是否活着和 worker 数量。
-- [ ] 计数增加 `worker_restarts`、`drain_timeout`、`forced_kill`。验收：上面三条路径各自加一，仍不渲染成 Prometheus 文本。
-- [ ] `docs/operations.md`：`SIGTERM` 的顺序，以及 `terminationGracePeriodSeconds` 要盖住排空时间加余量。验收：文档里的顺序和 master 的实现一致。
+- [x] `src/Master/`：master 统一 `listen`，按 `child_count` fork，子进程关掉无关 FD，只留自己的 listen 和 IPC。验收：非 root 下 `bin/serverd start --foreground -c config/server.example.php` 起 N 个进程，`ps` 能看到进程标题。
+- [x] `user` / `group` 只在以 root 启动时 `setgid` / `setuid`。验收：普通用户启动时跳过降权，不因此失败。
+- [x] `SIGCHLD` 在循环里收尸，不在信号处理器里 fork。验收：`kill -9` 一个 worker 后约 1 秒内补齐，`worker_restarts` 加一。
+- [x] 心跳 `ping` / `pong`，错过上限则强杀并拉起。验收：强杀记入强制回收，不和正常 drain 混用同一个计数。
+- [x] `SIGTERM` / `SIGINT`：停止 accept，等在途请求，超时再强杀。验收：慢请求能完成，进程树退出码 0；超过排空时间则强杀并让 `drain_timeout` 加一。
+- [x] `SIGUSR2` 或 `reload`：逐个换 worker。验收：替换期间并发的 `bin/phpserver-rpc` 没有失败。
+- [x] `max_requests` / `max_work_time` 默认 `0`（关）。打开时先排空再退出，并加上随机 `recycle_stagger`。验收：`max_requests=50` 时该 worker 在第 50 个请求完成后被换掉；默认配置从不触发。
+- [x] master 死亡时 worker 自己退出。验收：`kill -9` master 之后，心跳超时内没有残留 worker。
+- [x] `src/Ipc/`：unix socketpair、定长头、命令 enum（`stop`、`drain`、status、metrics 快照、`ping`），不用 `serialize`。验收：一条命令可以往返，body 不是 PHP 序列化串。
+- [x] `src/Server.php`：`Server::fromConfig(...)->run()`，标 `@api`。验收：`bin/serverd` 和以后的调用方从这个门面进去。
+- [x] `bin/serverd`：`start` / `stop` / `restart` / `reload` / `status`，以及 `--foreground` 和 daemon。验收：PID 文件默认不写；`status` 在本里程碑只报告 master 是否活着和 worker 数量。
+- [x] 计数增加 `worker_restarts`、`drain_timeout`、`forced_kill`。验收：上面三条路径各自加一，仍不渲染成 Prometheus 文本。
+- [x] `docs/operations.md`：`SIGTERM` 的顺序，以及 `terminationGracePeriodSeconds` 要盖住排空时间加余量。验收：文档里的顺序和 master 的实现一致。
 
 ## M6 admin 端口与限流钩子
 

@@ -1,12 +1,10 @@
 # Default target is `dev` (the last stage). `docker build .` runs the checks.
-# `bin/worker` can serve one process. `runtime` still starts `bin/serverd`,
-# which prints "not implemented" and exits 1 until M5.
+# `bin/serverd` forks workers. The runtime image still does not copy
+# `examples/`, so the Echo class in the sample config is not on its autoload
+# path; shipping that image is M7.
 #
 #   docker build --target dev -t phpserver:dev .
 #   docker build --target runtime -t phpserver:runtime .
-#
-# The runtime entrypoint, user, ports, and PHPSERVER_* variables stay as
-# they will be when `bin/serverd` really listens.
 
 FROM php:8.4-cli-alpine AS php-base
 
@@ -35,9 +33,9 @@ RUN composer install --no-interaction --prefer-dist --no-progress --no-scripts
 
 FROM php-base AS runtime
 
-# Placeholder until M5: bin/serverd exits 1 with "not implemented".
 # No HEALTHCHECK. Kubernetes probes on the admin port (/healthz, /readyz)
-# arrive in M6; this image does not serve them yet.
+# arrive in M6; this image does not serve them yet. examples/ is not copied,
+# so the sample Echo class is absent until M7.
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 

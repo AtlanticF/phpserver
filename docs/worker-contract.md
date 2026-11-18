@@ -36,7 +36,7 @@ public function dealProcess(string $message): Output;
 | `Output::$close` 或失败结果要求关闭 | 先把回复写完 | 视这条消息而定 |
 | 钩子抛异常且子类没有接住 | 不保证有协议回复 | `errors` |
 
-`SIGTERM` 和 `SIGINT` 只让循环停下来并退出，状态码 0。在途请求如果已经在 `dealProcess` 里，会先跑完这一条；还没开始的请求不会排空。排空是 M5 master 的事。
+`bin/worker` 收到 `SIGTERM` 或 `SIGINT` 就停循环并退出。在 master 下面，这两个信号和 IPC `drain` 会先停止 accept，等已经接上的请求写完再退出。排空超时和心跳见 [operations.md](operations.md)。
 
 `child_count`、`max_requests`、`max_work_time`、admin 端口在这个进程里不使用。
 

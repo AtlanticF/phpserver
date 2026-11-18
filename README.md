@@ -2,7 +2,7 @@
 
 轻量的多进程 text RPC 服务器，面向 Linux 和 Kubernetes。这是 2016 年 PHPServer 的干净重写：保留 prefork 和两个业务钩子的方向，不携带旧协议、旧品牌或运行时依赖。
 
-**当前状态：M4。** 仓库里有骨架、基础件、事件循环、text-rpc/1 的帧编解码和阻塞客户端，以及一个前台 worker：
+**当前状态：M5。** 仓库里有骨架、基础件、事件循环、text-rpc/1、阻塞客户端、前台 worker，以及 prefork master：
 
 - 配置：PHP 数组文件、`PHPSERVER_*` 环境变量覆盖、启动前校验
 - 日志：自带 `LoggerInterface`（方法签名与 PSR-3 同形）、文本或 JSON 行、request-id
@@ -11,9 +11,9 @@
 - 事件循环：`LoopInterface` / `SelectLoop`（流、定时器、信号）
 - 协议：text-rpc/1 帧（魔数 `TRPC/1`）和 JSON body
 - 客户端：阻塞的 `Client`，以及 `bin/phpserver-rpc`
-- 服务：`bin/worker` 前台跑一个进程，Echo 回明文 `hello`，Rpc 示例接 text-rpc/1
+- 服务：`bin/worker` 前台跑一个进程；`bin/serverd` 按 `child_count` fork。Echo 回明文 `hello`，Rpc 示例接 text-rpc/1
 
-还没有 master 和 admin 端口。`bin/serverd` 仍是占位，打印 `not implemented` 并以状态码 1 退出。一组进程还起不来。
+还没有 admin 端口。探针不要打到业务端口上。
 
 蓝图：[docs/ROADMAP.md](docs/ROADMAP.md)。
 待办：[TODO.md](TODO.md)。
@@ -91,6 +91,14 @@ bin/phpserver-rpc 127.0.0.1:9000 Echo.say '["hi"]' -v
 ```
 
 `bin/worker` 把日志打到 stdout。`-v` 把级别降到 debug。`--config`（或 `-c`）后面跟一个 worker 名。退出码：`0` 被信号停掉，`1` 配置或运行错误，`64` 用法错误。
+
+一组进程用 `serverd`。信号顺序和 `terminationGracePeriodSeconds` 写在 [`docs/operations.md`](docs/operations.md)。
+
+```sh
+php bin/serverd start --foreground -c config/server.example.php
+```
+
+`pid_file` 默认空，不写 PID 文件。`stop` / `status` / `reload` 需要先配一个。
 
 ## 事件循环
 
