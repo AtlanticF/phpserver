@@ -16,6 +16,7 @@ use PhpServer\Protocol\TextRpc\FrameKind;
 use PhpServer\Protocol\TextRpc\Header;
 use PhpServer\Protocol\TextRpc\JsonCodec;
 use PhpServer\Protocol\TextRpc\Version;
+use PhpServer\RateLimit\Decision;
 
 /**
  * text-rpc/1 worker.
@@ -180,6 +181,26 @@ abstract class RpcWorker extends AbstractWorker
         $header = new Header(FrameKind::Res, $frame->header->id, JsonCodec::NAME, strlen($body), $traceId);
 
         return new Output((new FrameEncoder())->encode(new Frame($header, $body)), false);
+    }
+
+    protected function dealLimited(string $message, Decision $decision): Output
+    {
+        $frame = $this->oneFrame($message);
+        $traceId = $frame->header->traceId ?? RequestId::generate()->value;
+        if ($decision === Decision::Degrade) {
+            $body = (new JsonCodec())->encodeResult(null);
+            $header = new Header(FrameKind::Res, $frame->header->id, JsonCodec::NAME, strlen($body), $traceId);
+
+            return new Output((new FrameEncoder())->encode(new Frame($header, $body)), false);
+        }
+
+        return new Output($this->encodeError(
+            $frame->header->id,
+            $traceId,
+            ErrorCode::RateLimited,
+            'Rate limited',
+            null,
+        ), false);
     }
 
     protected function frameTooLarge(string $buffer): Output

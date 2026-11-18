@@ -7,8 +7,8 @@ namespace PhpServer\Metrics;
 /**
  * In-process counters for one worker.
  *
- * The names are the contract. This class does not render Prometheus text;
- * that arrives with the admin port.
+ * The names are the contract. Prometheus text is rendered on the admin port,
+ * not here.
  *
  * @internal
  */
@@ -23,6 +23,10 @@ final class Counters
     private int $connRejected = 0;
 
     private int $idleTimeout = 0;
+
+    private int $rejected = 0;
+
+    private int $degraded = 0;
 
     public function incrementAccept(): void
     {
@@ -49,6 +53,16 @@ final class Counters
         ++$this->idleTimeout;
     }
 
+    public function incrementRejected(): void
+    {
+        ++$this->rejected;
+    }
+
+    public function incrementDegraded(): void
+    {
+        ++$this->degraded;
+    }
+
     public function get(string $name): int
     {
         return match ($name) {
@@ -57,12 +71,14 @@ final class Counters
             'errors' => $this->errors,
             'conn_rejected' => $this->connRejected,
             'idle_timeout' => $this->idleTimeout,
+            'rejected' => $this->rejected,
+            'degraded' => $this->degraded,
             default => throw new \InvalidArgumentException('unknown counter "' . $name . '"'),
         };
     }
 
     /**
-     * @return array{accept: int, requests: int, errors: int, conn_rejected: int, idle_timeout: int}
+     * @return array{accept: int, requests: int, errors: int, conn_rejected: int, idle_timeout: int, rejected: int, degraded: int}
      */
     public function snapshot(): array
     {
@@ -72,6 +88,8 @@ final class Counters
             'errors' => $this->errors,
             'conn_rejected' => $this->connRejected,
             'idle_timeout' => $this->idleTimeout,
+            'rejected' => $this->rejected,
+            'degraded' => $this->degraded,
         ];
     }
 }

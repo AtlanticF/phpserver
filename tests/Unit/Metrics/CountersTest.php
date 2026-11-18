@@ -18,6 +18,8 @@ final class CountersTest extends TestCase
         $counters->incrementErrors();
         $counters->incrementConnRejected();
         $counters->incrementIdleTimeout();
+        $counters->incrementRejected();
+        $counters->incrementDegraded();
 
         self::assertSame([
             'accept' => 1,
@@ -25,6 +27,8 @@ final class CountersTest extends TestCase
             'errors' => 1,
             'conn_rejected' => 1,
             'idle_timeout' => 1,
+            'rejected' => 1,
+            'degraded' => 1,
         ], $counters->snapshot());
         self::assertSame(1, $counters->get('conn_rejected'));
     }

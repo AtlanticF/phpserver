@@ -11,6 +11,8 @@ use PhpServer\Ipc\Command;
 use PhpServer\Ipc\Message;
 use PhpServer\Log\LoggerInterface;
 use PhpServer\Metrics\Counters;
+use PhpServer\RateLimit\Decision;
+use PhpServer\RateLimit\LimiterInterface;
 use PhpServer\Support\ClockInterface;
 
 /**
@@ -55,6 +57,8 @@ abstract class AbstractWorker implements WorkerInterface
     private float $heartbeatTimeout = 0.0;
 
     private int $lastPeerNs = 0;
+
+    private ?LimiterInterface $limiter = null;
 
     public function __construct(
         private readonly WorkerConfig $config,
@@ -208,6 +212,15 @@ abstract class AbstractWorker implements WorkerInterface
         $this->finishIfDraining();
     }
 
+    /**
+     * Install a limiter. Until this is called, `dealProcess` is reached with
+     * no rate-limit decision on the way.
+     */
+    public function setLimiter(LimiterInterface $limiter): void
+    {
+        $this->limiter = $limiter;
+    }
+
     public function counters(): Counters
     {
         return $this->counters;
@@ -248,6 +261,15 @@ abstract class AbstractWorker implements WorkerInterface
      * more than `pipeline_backlog` messages. The default closes.
      */
     protected function pipelineOverflow(string $message): Output
+    {
+        return new Output('', true);
+    }
+
+    /**
+     * Called instead of {@see dealProcess()} when a limiter rejects or degrades.
+     * The default closes. The RPC worker replies and keeps the connection.
+     */
+    protected function dealLimited(string $message, Decision $decision): Output
     {
         return new Output('', true);
     }
@@ -383,6 +405,19 @@ abstract class AbstractWorker implements WorkerInterface
 
     private function callProcess(string $message): Output
     {
+        if ($this->limiter !== null) {
+            $decision = $this->limiter->decide($message);
+            if ($decision === Decision::Reject) {
+                $this->counters->incrementRejected();
+
+                return $this->dealLimited($message, $decision);
+            }
+            if ($decision === Decision::Degrade) {
+                $this->counters->incrementDegraded();
+
+                return $this->dealLimited($message, $decision);
+            }
+        }
         $this->counters->incrementRequests();
         try {
             return $this->dealProcess($message);
