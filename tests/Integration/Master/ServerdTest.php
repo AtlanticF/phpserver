@@ -126,7 +126,13 @@ final class ServerdTest extends TestCase
         $this->server->signal(SIGTERM);
         $this->server->waitFor('drain_timeout=1', 8.0);
         $this->finish($pending);
-        $code = $this->server->stop();
+        $code = $this->server->waitUntilStopped(3.0);
+        if ($code === null) {
+            $output = $this->server->output();
+            $this->server->stop();
+            $this->server = null;
+            self::fail("master was still running after the drain timeout\n" . $output);
+        }
         $this->server = null;
         self::assertSame(0, $code);
     }

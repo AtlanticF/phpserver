@@ -360,6 +360,9 @@ final class Master
             return;
         }
         $this->shuttingDown = true;
+        // A second SIGTERM while PHP is leaving must not turn exit 0 into 143.
+        pcntl_signal(SIGTERM, SIG_IGN);
+        pcntl_signal(SIGINT, SIG_IGN);
         $this->logger->info('master draining');
         foreach ($this->listens as $name => $socket) {
             if (is_resource($socket)) {
@@ -397,6 +400,22 @@ final class Master
                 'drain_timeout' => $this->counters->get('drain_timeout'),
             ]);
         }
+        $deadline = hrtime(true) + 500_000_000;
+        do {
+            $this->reap();
+            $live = false;
+            foreach ($this->slots as $slot) {
+                if ($slot->pid > 0) {
+                    $live = true;
+                    break;
+                }
+            }
+            if (!$live) {
+                break;
+            }
+            usleep(10_000);
+        } while (hrtime(true) < $deadline);
+        $this->finishShutdown();
     }
 
     private function finishShutdown(): void

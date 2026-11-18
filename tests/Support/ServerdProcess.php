@@ -154,6 +154,24 @@ final class ServerdProcess
         throw new \RuntimeException($this->failure('timed out waiting for ' . $needle));
     }
 
+    /**
+     * Wait until the process exits by itself. Null means it is still running.
+     */
+    public function waitUntilStopped(float $seconds): ?int
+    {
+        $deadline = hrtime(true) + (int) round($seconds * 1_000_000_000);
+        while (hrtime(true) < $deadline) {
+            $this->drain();
+            $status = $this->status();
+            if (!$status['running']) {
+                return $this->stop();
+            }
+            usleep(20_000);
+        }
+
+        return null;
+    }
+
     public function stop(): int
     {
         if ($this->stopped) {
