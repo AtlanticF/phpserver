@@ -6,6 +6,9 @@ namespace PhpServer\Worker;
 
 use PhpServer\Config\WorkerConfig;
 use PhpServer\Event\LoopInterface;
+use PhpServer\Ipc\Codec;
+use PhpServer\Ipc\Command;
+use PhpServer\Ipc\Message;
 use PhpServer\Log\LoggerInterface;
 use PhpServer\Metrics\Counters;
 use PhpServer\Support\ClockInterface;
@@ -24,8 +27,11 @@ use PhpServer\Support\ClockInterface;
  * `conn_rejected` increments and nothing is buffered.
  *
  * An exception from either hook is logged and the connection is dropped.
- * The process keeps running. `SIGTERM` and `SIGINT` stop the loop; draining
- * in-flight work across a restart belongs to the master, not this process.
+ * The process keeps running. Without a master, `SIGTERM` and `SIGINT` stop
+ * the loop. With {@see self::supervise()}, those signals and an IPC `drain`
+ * stop accept and finish in-flight requests first. `max_requests` and
+ * `max_work_time` of 0 stay off; any other value drains, after a random
+ * delay of at most `recycle_stagger`.
  *
  * @api
  */
@@ -36,6 +42,19 @@ abstract class AbstractWorker implements WorkerInterface
 
     /** @var resource|null */
     private mixed $server = null;
+
+    /** @var resource|null */
+    private mixed $ipc = null;
+
+    private ?Codec $ipcCodec = null;
+
+    private bool $draining = false;
+
+    private bool $recycleArmed = false;
+
+    private float $heartbeatTimeout = 0.0;
+
+    private int $lastPeerNs = 0;
 
     public function __construct(
         private readonly WorkerConfig $config,
@@ -60,20 +79,35 @@ abstract class AbstractWorker implements WorkerInterface
         if (!is_resource($server)) {
             throw new \RuntimeException('listen socket is not open');
         }
-        $this->loop->onSignal(SIGTERM, function (int $signo): void {
-            $this->logger->info('worker {worker} stopping on signal {signal}', [
-                'worker' => $this->config->name,
-                'signal' => $signo,
-            ]);
-            $this->loop->stop();
-        });
-        $this->loop->onSignal(SIGINT, function (int $signo): void {
-            $this->logger->info('worker {worker} stopping on signal {signal}', [
-                'worker' => $this->config->name,
-                'signal' => $signo,
-            ]);
-            $this->loop->stop();
-        });
+        if ($this->ipc === null) {
+            $this->loop->onSignal(SIGTERM, function (int $signo): void {
+                $this->logger->info('worker {worker} stopping on signal {signal}', [
+                    'worker' => $this->config->name,
+                    'signal' => $signo,
+                ]);
+                $this->loop->stop();
+            });
+            $this->loop->onSignal(SIGINT, function (int $signo): void {
+                $this->logger->info('worker {worker} stopping on signal {signal}', [
+                    'worker' => $this->config->name,
+                    'signal' => $signo,
+                ]);
+                $this->loop->stop();
+            });
+        } else {
+            $this->loop->onSignal(SIGTERM, function (int $signo): void {
+                $this->beginDrain();
+            });
+            $this->loop->onSignal(SIGINT, function (int $signo): void {
+                $this->beginDrain();
+            });
+            $this->watchIpc();
+        }
+        if ($this->config->maxWorkTime > 0) {
+            $this->loop->addTimer($this->config->maxWorkTime, function (int $timerId): void {
+                $this->scheduleDrain();
+            });
+        }
         $this->loop->onReadable($server, function (mixed $stream): void {
             $this->accept();
         });
@@ -121,6 +155,57 @@ abstract class AbstractWorker implements WorkerInterface
         $this->armIdle($connection);
 
         return true;
+    }
+
+    /**
+     * Accept on a socket the master already bound. Call this before {@see self::run()}.
+     *
+     * @param resource $socket
+     */
+    public function useListen(mixed $socket): void
+    {
+        if (!is_resource($socket)) {
+            throw new \InvalidArgumentException('listen socket must be a stream');
+        }
+        stream_set_blocking($socket, false);
+        $this->server = $socket;
+    }
+
+    /**
+     * Attach the worker end of the master socketpair. Call this before {@see self::run()}.
+     *
+     * `$heartbeatTimeout` is how long the worker waits for any IPC byte before
+     * it exits. That covers a master that died without a clean drain.
+     *
+     * @param resource $ipc
+     */
+    public function supervise(mixed $ipc, float $heartbeatTimeout): void
+    {
+        if (!is_resource($ipc)) {
+            throw new \InvalidArgumentException('ipc socket must be a stream');
+        }
+        if (!is_finite($heartbeatTimeout) || $heartbeatTimeout <= 0) {
+            throw new \InvalidArgumentException('heartbeat timeout must be > 0');
+        }
+        $this->ipc = $ipc;
+        $this->heartbeatTimeout = $heartbeatTimeout;
+    }
+
+    /**
+     * Stop accepting and return once the open connections finish.
+     */
+    public function beginDrain(): void
+    {
+        if ($this->draining) {
+            $this->closeListen();
+            $this->finishIfDraining();
+
+            return;
+        }
+        $this->draining = true;
+        $this->logger->info('worker draining', ['worker' => $this->config->name]);
+        $this->closeListen();
+        $this->finishIfDraining();
     }
 
     public function counters(): Counters
@@ -172,44 +257,7 @@ abstract class AbstractWorker implements WorkerInterface
         if (is_resource($this->server)) {
             return;
         }
-        $errno = 0;
-        $errstr = '';
-        $context = stream_context_create([
-            'socket' => [
-                'backlog' => $this->config->backlog,
-                'so_reuseaddr' => true,
-                'tcp_nodelay' => true,
-            ],
-        ]);
-        $server = $this->quietly(function () use ($context, &$errno, &$errstr): mixed {
-            return stream_socket_server(
-                $this->socketUri(),
-                $errno,
-                $errstr,
-                STREAM_SERVER_BIND | STREAM_SERVER_LISTEN,
-                $context,
-            );
-        });
-        if (!is_resource($server)) {
-            $detail = $errstr !== '' ? $errstr : 'bind failed (' . $errno . ')';
-
-            throw new \RuntimeException('cannot listen on ' . $this->config->listen . ': ' . $detail);
-        }
-        stream_set_blocking($server, false);
-        $this->server = $server;
-    }
-
-    private function socketUri(): string
-    {
-        $host = $this->config->host;
-        if ($host === '*' || $host === '0.0.0.0') {
-            $host = '0.0.0.0';
-        }
-        if (str_contains($host, ':')) {
-            return 'tcp://[' . $host . ']:' . $this->config->port;
-        }
-
-        return 'tcp://' . $host . ':' . $this->config->port;
+        $this->server = ListenSocket::bind($this->config);
     }
 
     private function accept(): void
@@ -322,6 +370,7 @@ abstract class AbstractWorker implements WorkerInterface
                 $connection->readBuffer = '';
             }
             $this->reply($connection, $output->bytes);
+            $this->maybeRecycle();
             if (!$this->open($connection) || $connection->closing) {
                 return;
             }
@@ -534,6 +583,7 @@ abstract class AbstractWorker implements WorkerInterface
         $this->quietly(static function () use ($stream): void {
             fclose($stream);
         });
+        $this->finishIfDraining();
     }
 
     private function open(Connection $connection): bool
@@ -566,6 +616,161 @@ abstract class AbstractWorker implements WorkerInterface
             });
         }
         $this->server = null;
+    }
+
+    private function maybeRecycle(): void
+    {
+        $limit = $this->config->maxRequests;
+        if ($limit > 0 && $this->counters->get('requests') >= $limit) {
+            $this->scheduleDrain();
+        }
+    }
+
+    private function scheduleDrain(): void
+    {
+        if ($this->draining || $this->recycleArmed) {
+            return;
+        }
+        $this->recycleArmed = true;
+        $this->closeListen();
+        $this->loop->addTimer($this->staggerSeconds(), function (int $timerId): void {
+            $this->beginDrain();
+        });
+    }
+
+    private function staggerSeconds(): float
+    {
+        $limit = $this->config->recycleStagger;
+        if ($limit <= 0) {
+            return 0.0;
+        }
+        $millis = (int) round($limit * 1000);
+        if ($millis < 1) {
+            return 0.0;
+        }
+
+        return random_int(0, $millis) / 1000;
+    }
+
+    private function closeListen(): void
+    {
+        $server = $this->server;
+        if (!is_resource($server)) {
+            return;
+        }
+        $this->loop->removeStream($server);
+        $this->quietly(static function () use ($server): void {
+            fclose($server);
+        });
+        $this->server = null;
+    }
+
+    private function finishIfDraining(): void
+    {
+        if ($this->draining && $this->connections === []) {
+            $this->loop->stop();
+        }
+    }
+
+    private function watchIpc(): void
+    {
+        $ipc = $this->ipc;
+        if (!is_resource($ipc)) {
+            return;
+        }
+        stream_set_blocking($ipc, false);
+        $this->ipcCodec = new Codec();
+        $this->lastPeerNs = $this->clock->monotonic();
+        $this->loop->onReadable($ipc, function (mixed $stream): void {
+            $this->readIpc();
+        });
+        $interval = min(0.2, $this->heartbeatTimeout / 2);
+        $this->loop->addPeriodicTimer($interval, function (int $timerId): void {
+            $limit = (int) round($this->heartbeatTimeout * 1_000_000_000);
+            if ($this->clock->monotonic() - $this->lastPeerNs > $limit) {
+                $this->logger->warning('master heartbeat lost', ['worker' => $this->config->name]);
+                $this->loop->stop();
+            }
+        });
+    }
+
+    private function readIpc(): void
+    {
+        $ipc = $this->ipc;
+        $codec = $this->ipcCodec;
+        if (!is_resource($ipc) || $codec === null) {
+            return;
+        }
+        $chunk = $this->quietly(static function () use ($ipc): mixed {
+            return fread($ipc, 8192);
+        });
+        if (!is_string($chunk) || $chunk === '') {
+            if ($this->eof($ipc)) {
+                $this->logger->info('master ipc closed', ['worker' => $this->config->name]);
+                $this->loop->stop();
+            }
+
+            return;
+        }
+        $codec->feed($chunk);
+        while (true) {
+            $message = $codec->next();
+            if (!$message instanceof Message) {
+                return;
+            }
+            $this->lastPeerNs = $this->clock->monotonic();
+            $this->onIpc($message);
+        }
+    }
+
+    private function onIpc(Message $message): void
+    {
+        if ($message->command === Command::Ping) {
+            $this->sendIpc(new Message(Command::Pong, ''));
+
+            return;
+        }
+        if ($message->command === Command::Drain || $message->command === Command::Stop) {
+            $this->beginDrain();
+
+            return;
+        }
+        if ($message->command === Command::Status) {
+            $this->sendIpc(new Message(Command::StatusResult, $this->statusBody()));
+
+            return;
+        }
+        if ($message->command === Command::Metrics) {
+            $this->sendIpc(new Message(Command::MetricsResult, $this->metricsBody()));
+        }
+    }
+
+    private function sendIpc(Message $message): void
+    {
+        $ipc = $this->ipc;
+        $codec = $this->ipcCodec;
+        if (!is_resource($ipc) || $codec === null) {
+            return;
+        }
+        $bytes = $codec->encode($message);
+        $this->quietly(static function () use ($ipc, $bytes): mixed {
+            return fwrite($ipc, $bytes);
+        });
+    }
+
+    private function statusBody(): string
+    {
+        return 'pid=' . getmypid() . "\nworker=" . $this->config->name . "\nrequests=" . $this->counters->get('requests');
+    }
+
+    private function metricsBody(): string
+    {
+        $lines = [];
+        foreach ($this->counters->snapshot() as $name => $value) {
+            $lines[] = $name . '=' . $value;
+        }
+
+        return implode("\n", $lines);
     }
 
     private function quietly(\Closure $run): mixed

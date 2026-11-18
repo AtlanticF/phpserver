@@ -36,7 +36,8 @@ final class Console
           -v                 Debug logs on stdout
 
         The process accepts on that worker's listen address until SIGTERM or
-        SIGINT. child_count, the admin port, and the recycle valve are ignored.
+        SIGINT. child_count and the admin port are ignored. max_requests and
+        max_work_time still drain this process when they are not 0.
 
         Exit codes:
           0   stopped
@@ -88,15 +89,7 @@ final class Console
         $logger = new StdoutLogger($level, $config->log->json, null, null, $config->log->timezone);
         $clock = new SystemClock();
         $loop = new SelectLoop($clock);
-        $class = $workerConfig->workerClass;
-        if (!class_exists($class)) {
-            throw new \RuntimeException('worker class is not loaded: ' . $class);
-        }
-        $reflection = new \ReflectionClass($class);
-        if (!$reflection->isSubclassOf(AbstractWorker::class) || $reflection->isAbstract()) {
-            throw new \RuntimeException('worker class must be a concrete subclass of ' . AbstractWorker::class . ': ' . $class);
-        }
-        $worker = $reflection->newInstance(
+        $worker = Factory::create(
             $workerConfig,
             $logger,
             $loop,
@@ -104,32 +97,9 @@ final class Console
             new Counters(),
             $config->log->bodyTruncateBytes,
         );
-        $this->loadBootstrap($workerConfig->bootstrap, $worker);
         $worker->run();
 
         return self::EXIT_OK;
-    }
-
-    private function loadBootstrap(string $path, AbstractWorker $worker): void
-    {
-        if ($path === '') {
-            return;
-        }
-        if (!is_file($path) || !is_readable($path)) {
-            throw new \RuntimeException('bootstrap is not readable: ' . $path);
-        }
-        /** @var mixed $loaded */
-        $loaded = require $path;
-        if ($loaded instanceof \Closure) {
-            $loaded($worker);
-
-            return;
-        }
-        if ($loaded === 1 || $loaded === null) {
-            return;
-        }
-
-        throw new \RuntimeException('bootstrap must return a closure or nothing');
     }
 
     /**
