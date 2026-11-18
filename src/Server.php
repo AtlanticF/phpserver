@@ -19,6 +19,8 @@ use PhpServer\Master\Master;
  */
 final class Server
 {
+    public const string VERSION = 'dev';
+
     private function __construct(
         private readonly Config $config,
         private readonly LoggerInterface $logger,

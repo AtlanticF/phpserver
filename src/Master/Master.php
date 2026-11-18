@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace PhpServer\Master;
 
+use PhpServer\Admin\HttpServer;
 use PhpServer\Config\Config;
 use PhpServer\Config\WorkerConfig;
 use PhpServer\Event\SelectLoop;
@@ -14,6 +15,8 @@ use PhpServer\Ipc\Message;
 use PhpServer\Log\LoggerInterface;
 use PhpServer\Metrics\Counters;
 use PhpServer\Metrics\MasterCounters;
+use PhpServer\Metrics\PrometheusText;
+use PhpServer\Server;
 use PhpServer\Support\ClockInterface;
 use PhpServer\Support\SystemClock;
 use PhpServer\Worker\Factory;
@@ -56,6 +59,17 @@ final class Master
 
     private bool $drainTimedOut = false;
 
+    private ?HttpServer $admin = null;
+
+    private int $startedNs = 0;
+
+    private bool $collecting = false;
+
+    private int $collectGeneration = 0;
+
+    /** @var list<\Closure(string, string): void> */
+    private array $collectWaiters = [];
+
     public function __construct(
         private readonly Config $config,
         private readonly LoggerInterface $logger,
@@ -82,6 +96,7 @@ final class Master
     public function run(): int
     {
         Privileges::drop($this->config->user, $this->config->group, $this->logger);
+        $this->startedNs = $this->clock->monotonic();
         $this->title('phpserver: master');
         $this->logger->info('master started', ['pid' => getmypid()]);
         $this->bindAll();
@@ -105,6 +120,7 @@ final class Master
             $this->watchIpc($index);
         }
         try {
+            $this->startAdmin();
             $this->loop->run();
         } finally {
             $this->cleanup();
@@ -153,6 +169,7 @@ final class Master
             pcntl_signal(SIGTERM, SIG_DFL);
             pcntl_signal(SIGINT, SIG_DFL);
             pcntl_signal(SIGUSR2, SIG_DFL);
+            $this->admin?->releaseInherited();
             fclose($parent);
             try {
                 $this->becomeWorker($name, $worker, $listen, $child);
@@ -255,6 +272,17 @@ final class Master
     {
         if ($message->command === Command::Pong || $message->command === Command::StatusResult || $message->command === Command::MetricsResult) {
             $slot->misses = 0;
+        }
+        if ($message->command !== Command::MetricsResult) {
+            return;
+        }
+        $slot->metrics = $message->body;
+        if (!$slot->metricsPending) {
+            return;
+        }
+        $slot->metricsPending = false;
+        if ($this->collecting && $this->metricsComplete()) {
+            $this->finishCollect();
         }
     }
 
@@ -450,8 +478,178 @@ final class Master
         fclose($slot->ipc);
     }
 
+    private function startAdmin(): void
+    {
+        if (!$this->config->admin->enabled) {
+            return;
+        }
+        $admin = new HttpServer(
+            $this->config->admin,
+            $this->loop,
+            fn(): bool => $this->isReady(),
+            function (\Closure $done): void {
+                $this->collect($done);
+            },
+        );
+        $admin->start();
+        $this->admin = $admin;
+        $this->logger->info('admin listening', ['listen' => $this->config->admin->listen]);
+    }
+
+    private function isReady(): bool
+    {
+        if ($this->shuttingDown || $this->listens === []) {
+            return false;
+        }
+        foreach ($this->slots as $slot) {
+            if ($slot->pid > 0 && !$slot->killed) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param \Closure(string, string): void $done
+     */
+    private function collect(\Closure $done): void
+    {
+        $this->collectWaiters[] = $done;
+        if ($this->collecting) {
+            return;
+        }
+        $this->collecting = true;
+        $generation = ++$this->collectGeneration;
+        $pending = 0;
+        foreach ($this->slots as $slot) {
+            if ($slot->pid > 0 && !$slot->killed && is_resource($slot->ipc)) {
+                $slot->metricsPending = true;
+                $this->send($slot, new Message(Command::Metrics, ''));
+                ++$pending;
+            }
+        }
+        if ($pending === 0) {
+            $this->finishCollect();
+
+            return;
+        }
+        $this->loop->addTimer(0.3, function (int $timerId) use ($generation): void {
+            if ($generation === $this->collectGeneration) {
+                $this->finishCollect();
+            }
+        });
+    }
+
+    private function metricsComplete(): bool
+    {
+        foreach ($this->slots as $slot) {
+            if ($slot->metricsPending) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function finishCollect(): void
+    {
+        if (!$this->collecting) {
+            return;
+        }
+        $this->collecting = false;
+        foreach ($this->slots as $slot) {
+            $slot->metricsPending = false;
+        }
+        $status = $this->statusJson();
+        $metrics = $this->metricsText();
+        $waiters = $this->collectWaiters;
+        $this->collectWaiters = [];
+        foreach ($waiters as $waiter) {
+            $waiter($status, $metrics);
+        }
+    }
+
+    private function statusJson(): string
+    {
+        $workers = [];
+        foreach ($this->slots as $slot) {
+            $workers[] = [
+                'name' => $slot->name,
+                'pid' => $slot->pid,
+                'state' => $this->workerState($slot),
+                'requests' => $this->metricValue($slot->metrics, 'requests'),
+            ];
+        }
+        $uptime = 0.0;
+        if ($this->startedNs > 0) {
+            $uptime = ($this->clock->monotonic() - $this->startedNs) / 1_000_000_000;
+        }
+
+        return json_encode([
+            'version' => Server::VERSION,
+            'uptime' => $uptime,
+            'fds' => $this->fdCount(),
+            'workers' => $workers,
+        ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION);
+    }
+
+    private function metricsText(): string
+    {
+        $names = ['accept', 'requests', 'errors', 'conn_rejected', 'rejected', 'degraded'];
+        $totals = [];
+        foreach ($names as $name) {
+            $totals[$name] = 0;
+        }
+        foreach ($this->slots as $slot) {
+            foreach ($names as $name) {
+                $totals[$name] += $this->metricValue($slot->metrics, $name);
+            }
+        }
+        $totals['worker_restarts'] = $this->counters->get('worker_restarts');
+        $totals['drain_timeout'] = $this->counters->get('drain_timeout');
+
+        return PrometheusText::render($totals);
+    }
+
+    private function metricValue(string $body, string $name): int
+    {
+        $prefix = $name . '=';
+        foreach (explode("\n", $body) as $line) {
+            if (str_starts_with($line, $prefix) && preg_match('/^-?\d+$/', substr($line, strlen($prefix))) === 1) {
+                return (int) substr($line, strlen($prefix));
+            }
+        }
+
+        return 0;
+    }
+
+    private function workerState(Slot $slot): string
+    {
+        if ($slot->pid <= 0 || $slot->killed) {
+            return 'down';
+        }
+        if ($this->shuttingDown || $slot->reloading) {
+            return 'draining';
+        }
+
+        return 'ready';
+    }
+
+    private function fdCount(): int
+    {
+        $entries = scandir('/proc/self/fd');
+        if ($entries === false) {
+            return 0;
+        }
+
+        return max(0, count($entries) - 2);
+    }
+
     private function cleanup(): void
     {
+        $this->admin?->close();
+        $this->admin = null;
         foreach ($this->slots as $slot) {
             $this->closeIpc($slot);
             if ($slot->pid > 0) {

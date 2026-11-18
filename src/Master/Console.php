@@ -150,19 +150,90 @@ final class Console
 
     private function status(Config $config): int
     {
-        if ($config->pidFile === '') {
-            throw new \RuntimeException('pid file is not configured');
+        if (!$config->admin->enabled) {
+            throw new \RuntimeException('admin is disabled');
         }
-        $pid = $this->alivePid($config);
-        if ($pid === null) {
-            fwrite(STDOUT, "master dead\n");
-
-            return self::EXIT_ERROR;
+        $body = $this->adminGet($config, '/status');
+        try {
+            $decoded = json_decode($body, true, 16, JSON_THROW_ON_ERROR);
+        } catch (\JsonException $exception) {
+            throw new \RuntimeException('admin status was not JSON', 0, $exception);
         }
-        $workers = $this->childCount($pid);
-        fwrite(STDOUT, "master alive pid=" . $pid . "\nworkers " . $workers . "\n");
+        if (!is_array($decoded)) {
+            throw new \RuntimeException('admin status was not a JSON object');
+        }
+        fwrite(STDOUT, "master alive\n");
+        fwrite(STDOUT, 'version ' . $this->statusField($decoded, 'version') . "\n");
+        fwrite(STDOUT, 'uptime ' . $this->statusField($decoded, 'uptime') . "\n");
+        fwrite(STDOUT, 'fds ' . $this->statusField($decoded, 'fds') . "\n");
+        $workers = $decoded['workers'] ?? [];
+        if (is_array($workers)) {
+            foreach ($workers as $worker) {
+                if (!is_array($worker)) {
+                    continue;
+                }
+                fwrite(STDOUT, $this->statusField($worker, 'name')
+                    . ' pid=' . $this->statusField($worker, 'pid')
+                    . ' state=' . $this->statusField($worker, 'state')
+                    . ' requests=' . $this->statusField($worker, 'requests')
+                    . "\n");
+            }
+        }
 
         return self::EXIT_OK;
+    }
+
+    /**
+     * @param array<mixed> $fields
+     */
+    private function statusField(array $fields, string $name): string
+    {
+        $value = $fields[$name] ?? '';
+        if (is_int($value) || is_float($value)) {
+            return (string) $value;
+        }
+        if (!is_string($value)) {
+            return '';
+        }
+
+        return str_replace(["\r", "\n"], '', $value);
+    }
+
+    private function adminGet(Config $config, string $path): string
+    {
+        $admin = $config->admin;
+        $host = str_contains($admin->host, ':') ? '[' . $admin->host . ']' : $admin->host;
+        $errno = 0;
+        $errstr = '';
+        $socket = stream_socket_client(
+            'tcp://' . $host . ':' . $admin->port,
+            $errno,
+            $errstr,
+            2,
+        );
+        if (!is_resource($socket)) {
+            $detail = $errstr !== '' ? $errstr : 'connect failed';
+
+            throw new \RuntimeException('admin is not reachable: ' . $detail);
+        }
+        $request = 'GET ' . $path . " HTTP/1.1\r\nHost: " . $admin->host . "\r\nConnection: close\r\n";
+        if ($admin->token !== '') {
+            $request .= 'Authorization: Bearer ' . $admin->token . "\r\n";
+        }
+        $request .= "\r\n";
+        fwrite($socket, $request);
+        stream_set_timeout($socket, 2);
+        $raw = stream_get_contents($socket);
+        fclose($socket);
+        if (!is_string($raw) || !str_contains($raw, "\r\n\r\n")) {
+            throw new \RuntimeException('admin returned an incomplete response');
+        }
+        [$head, $body] = explode("\r\n\r\n", $raw, 2);
+        if (!str_starts_with($head, 'HTTP/1.1 200')) {
+            throw new \RuntimeException('admin status failed: ' . strtok($head, "\r\n"));
+        }
+
+        return $body;
     }
 
     private function refuseIfRunning(Config $config): void
@@ -226,20 +297,6 @@ final class Console
         }
 
         return (int) $text;
-    }
-
-    private function childCount(int $pid): int
-    {
-        $path = '/proc/' . $pid . '/task/' . $pid . '/children';
-        if (!is_file($path)) {
-            return 0;
-        }
-        $text = file_get_contents($path);
-        if (!is_string($text) || trim($text) === '') {
-            return 0;
-        }
-
-        return count(preg_split('/\s+/', trim($text)) ?: []);
     }
 
     private function writePid(string $path): void

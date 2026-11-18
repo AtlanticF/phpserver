@@ -20,6 +20,10 @@ final class Slot
 
     public bool $killed = false;
 
+    public bool $metricsPending = false;
+
+    public string $metrics = '';
+
     public readonly Codec $codec;
 
     /**

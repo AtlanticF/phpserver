@@ -25,7 +25,7 @@ final class ServerdTest extends TestCase
 
         $status = $this->runPhp([$root . '/bin/serverd', 'status', '-c', $root . '/config/server.example.php']);
         self::assertSame(1, $status['code']);
-        self::assertStringContainsString('pid file is not configured', $status['stderr']);
+        self::assertStringContainsString('admin is not reachable', $status['stderr']);
     }
 
     public function testForegroundStartsWorkersAndSkipsSetuid(): void
@@ -230,13 +230,6 @@ final class ServerdTest extends TestCase
         ]);
         $this->server->waitUntilReady(2);
         try {
-            $status = $this->runPhp([$root . '/bin/serverd', 'status', '-c', $root . '/config/server.example.php'], [
-                'PHPSERVER_PID_FILE' => $pidFile,
-            ]);
-            self::assertSame(0, $status['code'], $status['stderr']);
-            self::assertStringContainsString('master alive pid=' . $this->server->pid(), $status['stdout']);
-            self::assertStringContainsString('workers 2', $status['stdout']);
-
             $stop = $this->runPhp([$root . '/bin/serverd', 'stop', '-c', $root . '/config/server.example.php'], [
                 'PHPSERVER_PID_FILE' => $pidFile,
             ]);

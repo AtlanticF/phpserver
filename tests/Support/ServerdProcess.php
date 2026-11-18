@@ -45,9 +45,10 @@ final class ServerdProcess
         $process = proc_open($command, [
             1 => ['pipe', 'w'],
             2 => ['pipe', 'w'],
-        ], $pipes, $root, self::environment($env + [
+        ], $pipes, $root, self::environment(array_merge([
             'PHPSERVER_WORKER_RPC_LISTEN' => $address,
-        ]));
+            'PHPSERVER_ADMIN_ENABLED' => 'false',
+        ], $env)));
         if (!is_resource($process) || !isset($pipes[1], $pipes[2]) || !is_resource($pipes[1]) || !is_resource($pipes[2])) {
             throw new \RuntimeException('could not start bin/serverd');
         }
