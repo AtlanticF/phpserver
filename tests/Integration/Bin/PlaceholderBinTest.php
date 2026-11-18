@@ -8,28 +8,27 @@ use PHPUnit\Framework\TestCase;
 
 final class PlaceholderBinTest extends TestCase
 {
-    public function testBinsPrintNotImplementedAndExitNonZero(): void
+    public function testServerdHelpReplacesThePlaceholder(): void
     {
         $root = dirname(__DIR__, 3);
-        foreach (['serverd'] as $name) {
-            $pipes = [];
-            $process = proc_open([PHP_BINARY, $root . '/bin/' . $name], [
-                1 => ['pipe', 'w'],
-                2 => ['pipe', 'w'],
-            ], $pipes, $root);
-            if (!is_resource($process)) {
-                self::fail('proc_open failed for ' . $name);
-            }
-            $stdout = stream_get_contents($pipes[1]);
-            $stderr = stream_get_contents($pipes[2]);
-            fclose($pipes[1]);
-            fclose($pipes[2]);
-            $code = proc_close($process);
-
-            self::assertSame(1, $code, $name);
-            self::assertSame('', $stdout);
-            self::assertIsString($stderr);
-            self::assertStringContainsString('not implemented', $stderr);
+        $pipes = [];
+        $process = proc_open([PHP_BINARY, $root . '/bin/serverd', '--help'], [
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ], $pipes, $root);
+        if (!is_resource($process)) {
+            self::fail('proc_open failed');
         }
+        $stdout = stream_get_contents($pipes[1]);
+        $stderr = stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        $code = proc_close($process);
+
+        self::assertSame(0, $code);
+        self::assertIsString($stdout);
+        self::assertStringContainsString('serverd start', $stdout);
+        self::assertIsString($stderr);
+        self::assertStringNotContainsString('not implemented', $stderr);
     }
 }
