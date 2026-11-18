@@ -11,6 +11,12 @@ final class ServerdProcess
 {
     private bool $stopped = false;
 
+    /**
+     * Real exit status. `proc_get_status()` reaps the child, so a later
+     * `proc_close()` returns -1 and must not replace this value.
+     */
+    private ?int $exitCode = null;
+
     private string $output = '';
 
     private string $errorOutput = '';
@@ -63,7 +69,7 @@ final class ServerdProcess
         $deadline = hrtime(true) + 5_000_000_000;
         while (hrtime(true) < $deadline) {
             $this->drain();
-            $status = proc_get_status($this->process);
+            $status = $this->status();
             if (!$status['running']) {
                 throw new \RuntimeException($this->failure('serverd exited before listening'));
             }
@@ -138,7 +144,7 @@ final class ServerdProcess
             if (str_contains($this->output(), $needle)) {
                 return;
             }
-            $status = proc_get_status($this->process);
+            $status = $this->status();
             if (!$status['running']) {
                 break;
             }
@@ -151,16 +157,16 @@ final class ServerdProcess
     public function stop(): int
     {
         if ($this->stopped) {
-            return 0;
+            return $this->exitCode ?? 0;
         }
         $this->stopped = true;
         $this->drain();
-        $status = proc_get_status($this->process);
+        $status = $this->status();
         if ($status['running']) {
             posix_kill($status['pid'], SIGTERM);
             $deadline = hrtime(true) + 8_000_000_000;
             do {
-                $status = proc_get_status($this->process);
+                $status = $this->status();
                 if (!$status['running']) {
                     break;
                 }
@@ -170,13 +176,36 @@ final class ServerdProcess
             if ($status['running']) {
                 posix_kill($status['pid'], SIGKILL);
                 $this->killChildren($status['pid']);
+                $this->status();
             }
         }
         $this->drain();
         fclose($this->stdout);
         fclose($this->stderr);
+        $closed = proc_close($this->process);
+        if ($this->exitCode !== null) {
+            return $this->exitCode;
+        }
 
-        return proc_close($this->process);
+        return $closed;
+    }
+
+    /**
+     * @return array{command: string, pid: int, running: bool, signaled: bool, stopped: bool, exitcode: int, termsig: int, stopsig: int}
+     */
+    private function status(): array
+    {
+        $status = proc_get_status($this->process);
+        if ($status['running'] || $this->exitCode !== null) {
+            return $status;
+        }
+        if ($status['signaled']) {
+            $this->exitCode = 128 + $status['termsig'];
+        } elseif ($status['exitcode'] !== -1) {
+            $this->exitCode = $status['exitcode'];
+        }
+
+        return $status;
     }
 
     /**
