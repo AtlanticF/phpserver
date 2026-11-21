@@ -6,5 +6,6 @@ parameters:
         - tests
         - config
         - examples
+        - benchmarks/rpc/bench.php
     tmpDir: var/phpstan
     checkUninitializedProperties: true

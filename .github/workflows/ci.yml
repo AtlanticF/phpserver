@@ -39,3 +39,31 @@ jobs:
 
       - name: Tests
         run: composer test
+
+      - name: Benchmark smoke
+        run: |
+          set -euo pipefail
+          port="$(php -r '$s=stream_socket_server("tcp://127.0.0.1:0", $e, $m); if (!is_resource($s)) { fwrite(STDERR, (string) $m); exit(1); } $n=(string) stream_socket_get_name($s, false); fclose($s); $p=strrpos($n, ":"); echo substr($n, $p === false ? 0 : $p + 1);')"
+          addr="127.0.0.1:${port}"
+          PHPSERVER_WORKER_RPC_LISTEN="$addr" PHPSERVER_ADMIN_ENABLED=false \
+            php bin/serverd start --foreground -c config/server.example.php > /tmp/phpserver-bench.log 2>&1 &
+          pid=$!
+          cleanup() { kill -TERM "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; }
+          trap cleanup EXIT
+          ok=0
+          for _ in $(seq 1 50); do
+            if php benchmarks/rpc/bench.php "$addr" Echo.say '["hi"]' --count=20 > /tmp/phpserver-bench.out 2>/tmp/phpserver-bench.err; then
+              ok=1
+              break
+            fi
+            sleep 0.1
+          done
+          cat /tmp/phpserver-bench.out || true
+          cat /tmp/phpserver-bench.err || true
+          if [ "$ok" != 1 ]; then
+            cat /tmp/phpserver-bench.log
+            exit 1
+          fi
+          grep -E '^errors=0$' /tmp/phpserver-bench.out
+          grep -E '^p50_us=[0-9]+$' /tmp/phpserver-bench.out
+          grep -E '^p99_us=[0-9]+$' /tmp/phpserver-bench.out

@@ -11,6 +11,7 @@ $finder = (new PhpCsFixer\Finder())
     ])
     ->append([
         __DIR__ . '/.php-cs-fixer.dist.php',
+        __DIR__ . '/benchmarks/rpc/bench.php',
     ]);
 
 return (new PhpCsFixer\Config())
