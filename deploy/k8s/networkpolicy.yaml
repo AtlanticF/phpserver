@@ -1,0 +1,14 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: phpserver
+spec:
+  podSelector:
+    matchLabels:
+      app: phpserver
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - port: 9000
+        - port: 9100
