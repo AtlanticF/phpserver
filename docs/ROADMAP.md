@@ -1,6 +1,6 @@
 # 路线图
 
-v1 的蓝图。当前仓库停在 **M6**：配置、日志、时钟、异常、`SelectLoop`、text-rpc/1、阻塞客户端、前台 worker、prefork master，以及 admin 探针和指标已经在树上。还没有压测和发布。拆开的任务在 [TODO.md](../TODO.md)。
+v1 的蓝图。当前仓库是 **1.0.0**：配置、日志、时钟、异常、`SelectLoop`、text-rpc/1、阻塞客户端、前台 worker、prefork master、admin 探针和指标、运行时镜像和 Kubernetes 示例都在树上。拆开的任务在 [TODO.md](../TODO.md)。
 
 本文描述要做成的运行时，不描述旧服务器的源码。旧项目只留下三件事：master 预派生 worker、`stream_select` 循环、两个业务钩子（`dealInput` / `dealProcess`）。
 
@@ -141,7 +141,7 @@ worker 和 master 各自跑一个循环。一拍的顺序是：**信号 → 定�
 | `Master`、`Ipc`、`Admin` 的类型，`PrometheusText` | `@internal`（公开的是信号、CLI、admin 路径、计数器名和指标名） |
 | `LimiterInterface`、`Decision`、`TokenBucket` | `@api` |
 
-M7 还没写：压测、运行时镜像收尾和 1.0.0。指标名、admin 路径、配置键、CLI 参数是公开契约。
+1.0.0 已发布。指标名、admin 路径、配置键、CLI 参数是公开契约。压测数字不进版本承诺；`SO_REUSEPORT` 仍留在 1.0 之后。
 
 子命名空间：`Exception`、`Config`、`Log`、`Support`、`Event`、`Protocol`、`Protocol\TextRpc`、`Worker`、`Master`、`Ipc`、`Metrics`、`Admin`、`RateLimit`、`Client`。
 
@@ -157,7 +157,7 @@ M7 还没写：压测、运行时镜像收尾和 1.0.0。指标名、admin 路�
 | M4 | 首切：单进程 worker | [Worker](../src/Worker/)、[Counters](../src/Metrics/Counters.php)、[Echo](../examples/Echo/)、[Rpc](../examples/Rpc/)、[bin/worker](../bin/worker)、[worker 契约](worker-contract.md)、[调试](debugging.md) | Echo 的 HTTP 明文返回 `hello`；RPC 往返带 request-id；Handler 抛异常时进程不退出 | ✅ |
 | M5 | prefork 生产形态 | [Master](../src/Master/)、[Ipc](../src/Ipc/)、[Server](../src/Server.php)、[bin/serverd](../bin/serverd)、[运行](operations.md) | N 个 worker；崩溃后拉起；`SIGTERM` 排空；reload 期间请求不失败；`max_requests` 默认关闭 | ✅ |
 | M6 | K8s 探针与指标 | [Admin](../src/Admin/)、[Prometheus 文本](../src/Metrics/PrometheusText.php)、[RateLimit](../src/RateLimit/) | admin 上 `/healthz` 与 `/readyz` 为 200；`SIGTERM` 后 `/readyz` 先失败；业务端口不认这些路径 | ✅ |
-| M7 | 压测、镜像、文档，发布 1.0.0 | `benchmarks/`、根目录 `Dockerfile`（`dev` 已可用，`runtime` 在本里程碑收尾）、`deploy/k8s/`、五份文档定稿 | 镜像非 root；`docker stop` 能排空；README 五条命令内跑起 Echo | ⏳ |
+| M7 | 压测、镜像、文档，发布 1.0.0 | [`benchmarks/`](../benchmarks/README.md)、根目录 [`Dockerfile`](../Dockerfile) 的 `runtime`、[`deploy/k8s/`](../deploy/k8s/README.md)、五份文档定稿 | 镜像非 root；README 五条命令内跑起 Echo；`CHANGELOG` 的库栏和协议栏都写了 1.0.0 / text-rpc/1 | ✅ |
 
 `bin/serverd start --foreground` 会按配置 fork worker，并在 admin 口上提供 `/healthz`、`/readyz`、`/status`、`/metrics`。`bin/worker` 仍可单独前台跑一个进程。`bin/phpserver-rpc` 可以对业务口发一帧。
 

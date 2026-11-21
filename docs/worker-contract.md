@@ -1,6 +1,6 @@
 # Worker 契约
 
-M4 是一个前台进程：自己 `accept`，自己跑 `SelectLoop`，没有 master、fork 和 IPC。业务只实现两个钩子。
+`bin/worker` 是一个前台进程：自己 `accept`，自己跑 `SelectLoop`。`bin/serverd` 用同一个 worker 类，再加 fork 和 IPC。业务只实现两个钩子。
 
 ## 两个钩子
 
@@ -62,4 +62,4 @@ public function dealProcess(string $message): Output;
 
 ## 计数器
 
-`PhpServer\Metrics\Counters` 只在进程内累加，名字是 `accept`、`requests`、`errors`、`conn_rejected`、`idle_timeout`。没有 Prometheus 文本。
+`PhpServer\Metrics\Counters` 只在进程内累加，名字是 `accept`、`requests`、`errors`、`conn_rejected`、`idle_timeout`、`rejected`、`degraded`。Prometheus 文本由 master 在 admin 的 `/metrics` 上汇总，worker 进程不直接提供这个路径。

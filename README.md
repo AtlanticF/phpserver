@@ -2,7 +2,7 @@
 
 轻量的多进程 text RPC 服务器，面向 Linux 和 Kubernetes。这是 2016 年 PHPServer 的干净重写：保留 prefork 和两个业务钩子的方向，不携带旧协议、旧品牌或运行时依赖。
 
-**当前状态：M6。** 仓库里有骨架、基础件、事件循环、text-rpc/1、阻塞客户端、前台 worker、prefork master，以及 admin 探针：
+**当前状态：1.0.0。** 仓库里有骨架、基础件、事件循环、text-rpc/1、阻塞客户端、前台 worker、prefork master、admin 探针，以及运行时镜像和 Kubernetes 示例：
 
 - 配置：PHP 数组文件、`PHPSERVER_*` 环境变量覆盖、启动前校验
 - 日志：自带 `LoggerInterface`（方法签名与 PSR-3 同形）、文本或 JSON 行、request-id
@@ -13,7 +13,7 @@
 - 客户端：阻塞的 `Client`，以及 `bin/phpserver-rpc`
 - 服务：`bin/worker` 前台跑一个进程；`bin/serverd` 按 `child_count` fork。Echo 回明文 `hello`，Rpc 示例接 text-rpc/1
 
-探针在 admin 口上，默认 `127.0.0.1:9100` 的 `/healthz` 和 `/readyz`。不要打到业务端口。限流默认关闭。
+探针在 admin 口上，默认 `127.0.0.1:9100` 的 `/healthz` 和 `/readyz`。不要打到业务端口。限流默认关闭。库版本是 `1.0.0`，线协议版本是 `text-rpc/1`，两者分开记。
 
 蓝图：[docs/ROADMAP.md](docs/ROADMAP.md)。
 待办：[TODO.md](TODO.md)。
@@ -30,6 +30,23 @@ This repository is an independent, clean-room rewrite inspired by the architectu
 - 扩展：`pcntl`、`posix`、`sockets`
 - 运行时 Composer 包：**没有**
 
+## 快速开始
+
+下面 3 条就能看到 Echo 的 `hello`。先在仓库根目录：
+
+```sh
+composer install
+php bin/serverd start --foreground -c config/server.echo.php
+```
+
+另一个终端：
+
+```sh
+curl -sS http://127.0.0.1:9000/
+```
+
+输出是 `hello`。停掉用 Ctrl-C。
+
 ## 本地检查
 
 ```sh
@@ -45,15 +62,22 @@ composer show --tree
 
 ## 用 Docker 开始
 
-默认镜像是开发目标，跑测试、静态分析和代码风格。`runtime` 还不能接连接：`bin/serverd` 打印 `not implemented` 并以状态码 1 退出，留到 M5 再监听。
+开发镜像跑测试、静态分析和代码风格。运行时镜像以 uid 10001 跑 `bin/serverd start --foreground`，Echo 听 `0.0.0.0:9000`，admin 听 `0.0.0.0:9100`。`docker stop` 发 `SIGTERM`，日志里有 `master draining`。
 
 ```sh
 docker build --target dev -t phpserver:dev .
 docker run --rm phpserver:dev
-docker compose run --rm dev sh
+docker build --target runtime -t phpserver:runtime .
+docker run --rm -p 9000:9000 -p 9100:9100 phpserver:runtime
 ```
 
-`docker compose run --rm dev` 同样跑这三项检查，并把当前目录挂进容器（`vendor` 用镜像里的）。进 shell 用上面的第三条。
+另一个终端：`curl -sS http://127.0.0.1:9000/`。基础镜像 `php:8.4-cli-alpine` 是多架构的，本文件没有按 CPU 写死的步骤。日常 CI 只做本机架构。要同时打 amd64 和 arm64：
+
+```sh
+docker buildx build --platform linux/amd64,linux/arm64 --target runtime -t phpserver:runtime .
+```
+
+`docker compose run --rm dev` 同样跑三项检查，并把当前目录挂进容器（`vendor` 用镜像里的）。进 shell：`docker compose run --rm dev sh`。Kubernetes 示例在 [`deploy/k8s/`](deploy/k8s/README.md)。
 
 ## 调用 text-rpc/1
 

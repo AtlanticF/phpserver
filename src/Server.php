@@ -19,7 +19,7 @@ use PhpServer\Master\Master;
  */
 final class Server
 {
-    public const string VERSION = 'dev';
+    public const string VERSION = '1.0.0';
 
     private function __construct(
         private readonly Config $config,

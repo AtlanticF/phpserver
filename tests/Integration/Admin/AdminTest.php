@@ -42,7 +42,7 @@ final class AdminTest extends TestCase
         self::assertSame(200, $status['status']);
         $json = json_decode($status['body'], true, 16, JSON_THROW_ON_ERROR);
         self::assertIsArray($json);
-        self::assertSame('dev', $json['version']);
+        self::assertSame('1.0.0', $json['version']);
         self::assertIsFloat($json['uptime']);
         self::assertIsInt($json['fds']);
         self::assertIsArray($json['workers']);
@@ -64,7 +64,7 @@ final class AdminTest extends TestCase
             'PHPSERVER_ADMIN_TOKEN' => 'secret',
         ]);
         self::assertSame(0, $cli['code'], $cli['stderr']);
-        self::assertStringContainsString('version dev', $cli['stdout']);
+        self::assertStringContainsString('version 1.0.0', $cli['stdout']);
         self::assertStringContainsString('state=ready', $cli['stdout']);
         self::assertStringContainsString('fds ', $cli['stdout']);
         self::assertDoesNotMatchRegularExpression('/pid file/', $cli['stdout']);

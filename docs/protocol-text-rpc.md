@@ -1,9 +1,8 @@
-# text-rpc/1 协议规格（草案，待用户评审）
+# text-rpc/1 协议规格
 
-**状态：** Draft for review —— 评审通过后成为仓库 `docs/protocol-text-rpc.md`  
+**状态：** 已随库 1.0.0 发布。本文就是线协议 `text-rpc/1`，协议版本不跟库的 SemVer 补丁号绑在一起。  
 **日期：** 2026-10-16（Asia/Shanghai）  
-**依据：** `DECISIONS.md`（2026-10-16「线协议 text-rpc/1」条）、`PROTOCOL_RESEARCH.md`  
-**协议版本：** `TRPC/1`（与 `phpserver/phpserver` 库的 SemVer 版本相互独立）
+**协议版本：** `TRPC/1`
 
 本文中的 **MUST / MUST NOT / SHOULD / SHOULD NOT / MAY** 按 RFC 2119 / RFC 8174 解释（仅在全大写时具有规范含义）。
 
@@ -99,7 +98,7 @@ SP           = %x20                                   ; 恰好一个空格
 - 字符集 `[A-Za-z0-9._-]`，长度 1 ~ 64。
 - 客户端 **MAY** 在 `REQ` 上带；服务端 **MUST** 原样沿用；未带时服务端 **MUST** 生成一个（格式由实现决定，建议 `r-` + 随机十六进制）。
 - `RES` / `ERR` **MUST** 带 `trace-id`；`PING` / `PONG` **MAY** 不带。
-- 服务端日志中与该请求相关的每一行 **MUST** 含此 trace-id（见 DECISIONS：request-id）。
+- 服务端日志中与该请求相关的每一行 **MUST** 含此 trace-id。
 
 ### 3.5 扩展字段 `ext-field`
 
@@ -165,7 +164,7 @@ SP           = %x20                                   ; 恰好一个空格
 | −32601 | MethodNotFound | body | 保持 | 方法不存在 |
 | −32602 | InvalidParams | body | 保持 | 参数不符 |
 | −32603 | InternalError | body | 保持 | Handler 抛出未处理异常 |
-| −32001 | RateLimited | body | 保持 | 被限流钩子拒绝（DECISIONS：默认关） |
+| −32001 | RateLimited | body | 保持 | 被限流钩子拒绝。限流默认关闭 |
 | −32002 | FrameTooLarge | 帧 | **关闭** | 头行 > 256 字节，或 `len` > `max_body_bytes` |
 | −32003 | Timeout | body | 保持（见 §7.4） | 处理超过 `process_timeout` |
 | −32004 | UnsupportedVersionOrCodec | 帧 / body | 版本：**关闭**；codec：保持 | 魔数不是 `TRPC/1`；或 codec 不支持 |
@@ -256,11 +255,11 @@ SP           = %x20                                   ; 恰好一个空格
 
 ## 10. 安全注意事项
 
-- 协议本身**不加密、不鉴权**。生产 **SHOULD** 只在私有网络 / K8s NetworkPolicy 内暴露；需要加密时在外部（mesh / stunnel / TLS 终结）完成。业务端口默认 bind `127.0.0.1`（见 EXTRA_CONSIDERATIONS）。
+- 协议本身**不加密、不鉴权**。生产 **SHOULD** 只在私有网络 / K8s NetworkPolicy 内暴露；需要加密时在外部（mesh / stunnel / TLS 终结）完成。示例配置的业务端口 bind `127.0.0.1`。运行时镜像用 `PHPSERVER_LISTEN` 改成 `0.0.0.0:9000`，否则发布的容器端口到不了进程。
 - `len` 先于 body 校验 → 服务端不会为超大帧分配内存。
 - JSON 解码 **MUST** 设置深度上限（建议 64）并使用 `JSON_THROW_ON_ERROR`；**MUST NOT** 把 body 反序列化为任意 PHP 对象。
 - `ERR` 的 `message`/`data` **MUST NOT** 泄露内部细节；完整异常只进日志（带 trace-id）。
-- 日志中 body **MUST** 截断（DECISIONS：verbose/trace body 截断）。
+- 日志中 body **MUST** 截断。默认上限是 `log.body_truncate_bytes`（256 字节）。
 - `trace-id` 字符集受限，防止日志注入。
 
 ---
