@@ -22,5 +22,12 @@ if ($autoload === null) {
 
 require $autoload;
 
+if (defined('STDOUT')) {
+    stream_set_write_buffer(STDOUT, 0);
+}
+if (defined('STDERR')) {
+    stream_set_write_buffer(STDERR, 0);
+}
+
 /** @var list<string> $argv */
 exit((new Console())->run($argv));

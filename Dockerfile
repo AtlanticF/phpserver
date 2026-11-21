@@ -1,10 +1,15 @@
 # Default target is `dev` (the last stage). `docker build .` runs the checks.
-# `bin/serverd` forks workers. The runtime image still does not copy
-# `examples/`, so the Echo class in the sample config is not on its autoload
-# path; shipping that image is M7.
+# `runtime` is the image to run: non-root, examples on the autoload path,
+# `bin/serverd start --foreground` as PID 1.
 #
 #   docker build --target dev -t phpserver:dev .
 #   docker build --target runtime -t phpserver:runtime .
+#
+# The base image is multi-arch. This file has no architecture-specific steps.
+# A native build is enough for daily CI. Both platforms:
+#
+#   docker buildx build --platform linux/amd64,linux/arm64 \
+#     --target runtime -t phpserver:runtime .
 
 FROM php:8.4-cli-alpine AS php-base
 
@@ -33,9 +38,8 @@ RUN composer install --no-interaction --prefer-dist --no-progress --no-scripts
 
 FROM php-base AS runtime
 
-# No HEALTHCHECK. Kubernetes probes on the admin port (/healthz, /readyz)
-# arrive in M6; this image does not serve them yet. examples/ is not copied,
-# so the sample Echo class is absent until M7.
+# No HEALTHCHECK. Kubernetes probes hit the admin port (/healthz, /readyz).
+# examples/ is copied so config/server.echo.php can load EchoWorker.
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
@@ -51,6 +55,7 @@ RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-di
 COPY bin bin
 COPY config config
 COPY src src
+COPY examples examples
 
 RUN addgroup -g 10001 -S phpserver \
     && adduser -S -D -H -u 10001 -G phpserver -h /app phpserver \

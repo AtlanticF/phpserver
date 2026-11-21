@@ -8,3 +8,12 @@ services:
       - .:/app
       # Keep the image's vendor when the source tree is mounted over /app.
       - /app/vendor
+
+  runtime:
+    image: phpserver:runtime
+    build:
+      context: .
+      target: runtime
+    ports:
+      - "9000:9000"
+      - "9100:9100"

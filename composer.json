@@ -21,12 +21,12 @@
     },
     "autoload": {
         "psr-4": {
-            "PhpServer\\": "src/"
+            "PhpServer\\": "src/",
+            "PhpServer\\Examples\\": "examples/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "PhpServer\\Examples\\": "examples/",
             "PhpServer\\Tests\\": "tests/"
         }
     },
