@@ -1,7 +1,7 @@
-# 和旧服务器对照
+# Compare with the old server
 
-在同一台机器上各跑一轮，用 [报告模板](../README.md) 各写一份，方便比 P50、P99 和 QPS。本仓库不放旧 PHPServer 的源码、配置或文档。
+Run one pass of each server on the same machine. Fill the [report template](../README.md) twice, then compare P50, P99, and QPS. This repository does not contain the old PHPServer source, configuration, or docs.
 
-1. 先按 [http](../http/README.md) 或 [rpc/bench.php](../rpc/bench.php) 测本仓库，记下机器规格、PHP 版本、连接数和 payload。
-2. 停掉本仓库的进程，让旧服务器听同一个地址，用同一套连接数和 payload 再测一轮。
-3. 两份报告并排。旧服务器起不来、找不到二进制、或不能装到这台机器上时，第二份报告写「跳过」并写明原因。不要把旧源码拷进本仓库来凑这次对照。
+1. Measure this repository with [http](../http/README.md) or [rpc/bench.php](../rpc/bench.php). Record the machine, PHP version, connection count, and payload.
+2. Stop this repository. Start the old server on the same address and repeat the same connection count and payload.
+3. Put the two reports side by side. If the old server cannot be started, the binary cannot be found, or it cannot be installed on this machine, write `skipped` and the reason in the second report. Do not copy the old source into this repository to force the comparison.
