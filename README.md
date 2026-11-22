@@ -29,6 +29,7 @@ This is a clean-room rewrite of the 2016 PHPServer idea: one master, preforked w
 - [Requirements](#requirements)
 - [Quick start](#quick-start)
 - [Usage](#usage)
+  - [A small service](#a-small-service)
 - [Docker](#docker)
 - [Kubernetes](#kubernetes)
 - [Documentation](#documentation)
@@ -80,6 +81,120 @@ curl -sS http://127.0.0.1:9000/
 Stop the server with Ctrl-C.
 
 ## Usage
+
+### A small service
+
+An RPC method is a string name plus a closure. Subclass `RpcWorker` so the class can be `final`, put the business method on a normal class, and register it from the bootstrap file. Do not override `dealInput` or `dealProcess`.
+
+`AppWorker.php`:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace App;
+
+use PhpServer\Worker\RpcWorker;
+
+final class AppWorker extends RpcWorker {}
+```
+
+`OrderApi.php`. The return value is encoded as the JSON `result`. A thrown exception becomes `-32603` with the message `Internal error`, so put a business failure in the result.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace App;
+
+final class OrderApi
+{
+    /** @param array<array-key, mixed>|null $params */
+    public function get(?array $params, string $traceId): array
+    {
+        $id = is_array($params) ? (string) ($params['id'] ?? '') : '';
+        if ($id === '') {
+            return ['ok' => false, 'error' => 'id required'];
+        }
+
+        return ['ok' => true, 'id' => $id];
+    }
+}
+```
+
+`bootstrap.php`, relative to the working directory. An associative array arrives as an associative array. A JSON array arrives as a list. Both an empty object and an empty array arrive as `[]`.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use App\AppWorker;
+use App\OrderApi;
+
+$api = new OrderApi();
+
+return static function (AppWorker $worker) use ($api): void {
+    $worker->on('Order.get', $api->get(...));
+};
+```
+
+`config/server.php`:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use App\AppWorker;
+
+return [
+    'workers' => [
+        'App' => [
+            'listen' => '127.0.0.1:9000',
+            'worker_class' => AppWorker::class,
+            'bootstrap' => 'bootstrap.php',
+            'child_count' => 4,
+        ],
+    ],
+];
+```
+
+The business project autoloads `App\` itself. This package only autoloads `PhpServer\`.
+
+```sh
+php vendor/bin/serverd start --foreground -c config/server.php
+```
+
+Call it from another PHP process. One connection, one call at a time. A list becomes a JSON array. An associative array becomes a JSON object.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use PhpServer\Client\Client;
+use PhpServer\Client\RpcError;
+
+$client = new Client();
+$client->connect('127.0.0.1:9000', 2.0);
+
+try {
+    $order = $client->call('Order.get', ['id' => '7'], 'order-7')->result;
+} catch (RpcError $error) {
+    // $error->getCode() is the text-rpc/1 code. $error->traceId matches the server log.
+}
+
+$client->close();
+```
+
+The same call from the shell:
+
+```sh
+php vendor/bin/phpserver-rpc 127.0.0.1:9000 Order.get '{"id":"7"}' --trace-id=order-7
+```
 
 ### Send a frame
 

@@ -29,6 +29,7 @@
 - [要求](#要求)
 - [快速开始](#快速开始)
 - [用法](#用法)
+  - [一个小服务](#一个小服务)
 - [Docker](#docker)
 - [Kubernetes](#kubernetes)
 - [文档](#文档)
@@ -78,6 +79,120 @@ curl -sS http://127.0.0.1:9000/
 Ctrl-C 停掉服务。
 
 ## 用法
+
+### 一个小服务
+
+一个 RPC 接口就是一个方法名加一个闭包。子类继承 `RpcWorker`，这样业务类可以是 `final`。业务方法写在普通类上，在 bootstrap 里登记。不要重写 `dealInput` 或 `dealProcess`。
+
+`AppWorker.php`：
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace App;
+
+use PhpServer\Worker\RpcWorker;
+
+final class AppWorker extends RpcWorker {}
+```
+
+`OrderApi.php`。返回值会编成 JSON 的 `result`。抛出的异常变成 `-32603`，message 固定是 `Internal error`，所以业务失败放进返回值里。
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace App;
+
+final class OrderApi
+{
+    /** @param array<array-key, mixed>|null $params */
+    public function get(?array $params, string $traceId): array
+    {
+        $id = is_array($params) ? (string) ($params['id'] ?? '') : '';
+        if ($id === '') {
+            return ['ok' => false, 'error' => 'id required'];
+        }
+
+        return ['ok' => true, 'id' => $id];
+    }
+}
+```
+
+`bootstrap.php`，路径相对启动时的工作目录。JSON 对象进来是关联数组，JSON 数组进来是列表。空对象和空数组都会变成 `[]`。
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use App\AppWorker;
+use App\OrderApi;
+
+$api = new OrderApi();
+
+return static function (AppWorker $worker) use ($api): void {
+    $worker->on('Order.get', $api->get(...));
+};
+```
+
+`config/server.php`：
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use App\AppWorker;
+
+return [
+    'workers' => [
+        'App' => [
+            'listen' => '127.0.0.1:9000',
+            'worker_class' => AppWorker::class,
+            'bootstrap' => 'bootstrap.php',
+            'child_count' => 4,
+        ],
+    ],
+];
+```
+
+业务项目自己自动加载 `App\`。这个包只自动加载 `PhpServer\`。
+
+```sh
+php vendor/bin/serverd start --foreground -c config/server.php
+```
+
+另一个 PHP 进程里调用。一条连接上同时只有一个调用。列表编成 JSON 数组，关联数组编成 JSON 对象。
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use PhpServer\Client\Client;
+use PhpServer\Client\RpcError;
+
+$client = new Client();
+$client->connect('127.0.0.1:9000', 2.0);
+
+try {
+    $order = $client->call('Order.get', ['id' => '7'], 'order-7')->result;
+} catch (RpcError $error) {
+    // $error->getCode() 是 text-rpc/1 错误码。$error->traceId 对得上服务端日志。
+}
+
+$client->close();
+```
+
+同一调用在命令行：
+
+```sh
+php vendor/bin/phpserver-rpc 127.0.0.1:9000 Order.get '{"id":"7"}' --trace-id=order-7
+```
 
 ### 发一帧
 
