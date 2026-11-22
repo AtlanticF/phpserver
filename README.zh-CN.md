@@ -98,7 +98,7 @@ use PhpServer\Worker\RpcWorker;
 final class AppWorker extends RpcWorker {}
 ```
 
-`OrderApi.php`。返回值会编成 JSON 的 `result`。抛出的异常变成 `-32603`，message 固定是 `Internal error`，所以业务失败放进返回值里。
+`OrderApi.php`。正常返回值会编成 JSON 的 `result`。调用方能改的失败抛 `BusinessException`。其它异常仍是 `-32603`，message 固定是 `Internal error`。
 
 ```php
 <?php
@@ -107,6 +107,9 @@ declare(strict_types=1);
 
 namespace App;
 
+use PhpServer\Exception\AgentError;
+use PhpServer\Exception\BusinessException;
+
 final class OrderApi
 {
     /** @param array<array-key, mixed>|null $params */
@@ -114,13 +117,22 @@ final class OrderApi
     {
         $id = is_array($params) ? (string) ($params['id'] ?? '') : '';
         if ($id === '') {
-            return ['ok' => false, 'error' => 'id required'];
+            throw new BusinessException(new AgentError(
+                code: 1001,
+                message: 'Order not found',
+                reason: 'ORDER_NOT_FOUND',
+                domain: 'shop.example',
+                param: 'id',
+                hint: 'Pass an id that exists.',
+            ));
         }
 
-        return ['ok' => true, 'id' => $id];
+        return ['id' => $id];
     }
 }
 ```
+
+`reason` 是 Agent 用来分支的稳定记号。`retryable` 默认 false，同一次调用不要原样再发。已有的异常类型不想换成 `BusinessException` 时，实现 `AgentFailure`。线上形状写在 [`docs/protocol-text-rpc.md`](docs/protocol-text-rpc.md)。
 
 `bootstrap.php`，路径相对启动时的工作目录。JSON 对象进来是关联数组，JSON 数组进来是列表。空对象和空数组都会变成 `[]`。
 
@@ -182,7 +194,10 @@ $client->connect('127.0.0.1:9000', 2.0);
 try {
     $order = $client->call('Order.get', ['id' => '7'], 'order-7')->result;
 } catch (RpcError $error) {
-    // $error->getCode() 是 text-rpc/1 错误码。$error->traceId 对得上服务端日志。
+    $data = is_array($error->data) ? $error->data : [];
+    if (($data['retryable'] ?? false) === true) {
+        // 原样再调一次。否则按 $data['reason'] 改 $data['param']，不要重发同一帧。
+    }
 }
 
 $client->close();

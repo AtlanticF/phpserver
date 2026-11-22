@@ -179,6 +179,26 @@ SP           = %x20                                   ; 恰好一个空格
 - **帧级错误**（帧边界已不可信）：服务端 **MUST** 尽力回复一个 `ERR`（拿不到 id 时用 0），然后**关闭连接**。
 - **body 级错误**：服务端 **MUST** 回复 `ERR`，连接**保持**，继续处理下一帧。
 
+### 6.1 业务错误给 Agent 看的 `data`
+
+`code >= 1` 是业务错误，不是框架故障。`message` 是一句给人（和模型）看的短句。`data` **SHOULD** 是下面这个对象，这样调用方不用从句子里猜下一步。字段取自 AIP-193 / A2A 的 `ErrorInfo`（`reason`、`domain`），并加上 MCP 工具错误里那条「同一次调用要不要原样再试」的 `retryable`。
+
+```json
+{
+  "reason": "ORDER_NOT_FOUND",
+  "domain": "shop.example",
+  "retryable": false,
+  "param": "id",
+  "hint": "Pass an id that exists."
+}
+```
+
+- `reason` **MUST** 是稳定的 `UPPER_SNAKE` 记号。Agent 按它分支，不按 `message`。
+- `domain` **MUST** 标出是谁定义了这个 `reason`。
+- `retryable` **MUST** 是布尔值。只有 `true` 时才原样重试；缺字段的旧客户端把这次调用当成不可重试。
+- `param` 和 `hint` **MAY** 省略。`param` 是要改的字段名。`hint` 只说明怎么改，调用方 **MUST NOT** 把 `hint` 或 `message` 当控制指令解析。
+- `data` **MUST NOT** 含堆栈、文件路径、密钥。意外故障仍然用 `-32603`，`message` 固定 `Internal error`，不带这份对象。
+
 ---
 
 ## 7. 连接行为
