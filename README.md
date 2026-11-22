@@ -1,53 +1,181 @@
-# phpserver/phpserver
+<!-- Banner is a dynamic SVG from capsule-render (https://github.com/kyechan99/capsule-render). type=waving animates the waves. -->
 
-轻量的多进程 text RPC 服务器，面向 Linux 和 Kubernetes。这是 2016 年 PHPServer 的干净重写：保留 prefork 和两个业务钩子的方向，不携带旧协议、旧品牌或运行时依赖。
+<p align="center">
+  <img alt="phpserver — prefork text RPC for PHP" src="https://capsule-render.vercel.app/api?type=waving&amp;color=0:0F172A,100:1D4ED8&amp;height=240&amp;section=header&amp;text=phpserver&amp;fontSize=56&amp;fontAlignY=38&amp;fontColor=ffffff&amp;desc=prefork%20text%20RPC%20for%20PHP&amp;descAlignY=62&amp;descSize=18&amp;animation=fadeIn" />
+</p>
 
-**当前状态：1.0.0。** 仓库里有骨架、基础件、事件循环、text-rpc/1、阻塞客户端、前台 worker、prefork master、admin 探针，以及运行时镜像和 Kubernetes 示例：
+<p align="center">
+  <a href="https://github.com/AtlanticF/phpserver/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/AtlanticF/phpserver/ci.yml?branch=main&amp;label=CI" /></a>
+  <a href="CHANGELOG.md"><img alt="version 1.0.0" src="https://img.shields.io/badge/version-1.0.0-blue" /></a>
+  <a href="docs/protocol-text-rpc.md"><img alt="text-rpc/1" src="https://img.shields.io/badge/text--rpc-1-0f766e" /></a>
+  <img alt="PHP &gt;= 8.3" src="https://img.shields.io/badge/php-%3E%3D8.3-777BB4?logo=php&amp;logoColor=white" />
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/AtlanticF/phpserver" /></a>
+</p>
 
-- 配置：PHP 数组文件、`PHPSERVER_*` 环境变量覆盖、启动前校验
-- 日志：自带 `LoggerInterface`（方法签名与 PSR-3 同形）、文本或 JSON 行、request-id
-- 时钟：墙钟 + 单调 `hrtime`
-- 异常：`PhpServerException` 标记接口和四个具体异常
-- 事件循环：`LoopInterface` / `SelectLoop`（流、定时器、信号）
-- 协议：text-rpc/1 帧（魔数 `TRPC/1`）和 JSON body
-- 客户端：阻塞的 `Client`，以及 `bin/phpserver-rpc`
-- 服务：`bin/worker` 前台跑一个进程；`bin/serverd` 按 `child_count` fork。Echo 回明文 `hello`，Rpc 示例接 text-rpc/1
+<p align="center">
+  <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a>
+</p>
 
-探针在 admin 口上，默认 `127.0.0.1:9100` 的 `/healthz` 和 `/readyz`。不要打到业务端口。限流默认关闭。库版本是 `1.0.0`，线协议版本是 `text-rpc/1`，两者分开记。
+# phpserver
 
-蓝图：[docs/ROADMAP.md](docs/ROADMAP.md)。
-待办：[TODO.md](TODO.md)。
+Slight prefork text RPC server for Linux and Kubernetes. Library **1.0.0**. Wire protocol **text-rpc/1**. The two versions are recorded separately and are not tied together.
 
-## Origins / 来源
+This is a clean-room rewrite of the 2016 PHPServer idea: one master, preforked workers, a `select` loop, and two business hooks. It does not carry the old protocol, the old brand, or any runtime Composer package.
 
-This repository is an independent, clean-room rewrite inspired by the architecture of the original PHPServer (v1.3.4, from the PHP 5.6 era). That server was a multi-process PHP RPC server developed and used in production at Jumei (聚美优品). None of its source, configuration, or documentation is included here. What is kept is the original idea: a slight master that preforks workers, a select-based event loop, and a two-hook worker contract (`dealInput` / `dealProcess`). The names "PHPServer" and "Jumei" describe provenance only; this project is not affiliated with or endorsed by Jumei. See [NOTICE](NOTICE).
+## Contents
 
-本仓库是独立的净室重写，不包含原 PHPServer 的代码、配置或文档。
+- [About](#about)
+- [Features](#features)
+- [Requirements](#requirements)
+- [Quick start](#quick-start)
+- [Usage](#usage)
+- [Docker](#docker)
+- [Kubernetes](#kubernetes)
+- [Documentation](#documentation)
+- [Development](#development)
+- [Provenance](#provenance)
+- [Contributing](#contributing)
+- [License](#license)
 
-## 要求
+## About
 
-- PHP >= 8.3（CI 覆盖 8.3 和 8.4）
-- 扩展：`pcntl`、`posix`、`sockets`
-- 运行时 Composer 包：**没有**
+`bin/serverd` binds the listen socket, forks `child_count` workers, and drains on `SIGTERM`. Workers accept connections and run `SelectLoop`. Business code implements `dealInput` and `dealProcess`.
 
-## 快速开始
+Admin probes and metrics listen on their own port, `127.0.0.1:9100` by default. Do not point `/healthz` or `/readyz` at the business port. Rate limiting is off unless a bootstrap calls `setLimiter()`.
 
-下面 3 条就能看到 Echo 的 `hello`。先在仓库根目录：
+Deeper docs in this repository are written in Chinese. The links below still point at the current behavior.
+
+## Features
+
+- Config: a PHP array file, `PHPSERVER_*` overrides, checked before the process serves
+- Log: a `LoggerInterface` with the same method names as PSR-3, text or JSON lines, request-id
+- Clock: wall time plus monotonic `hrtime`
+- Protocol: text-rpc/1 frames (magic `TRPC/1`) and a JSON body
+- Client: a blocking `Client`, and `bin/phpserver-rpc`
+- Process: `bin/worker` runs one foreground process; `bin/serverd` forks. Echo answers plaintext `hello`. The Rpc example speaks text-rpc/1
+- Admin: `/healthz`, `/readyz`, `/status`, `/metrics` on the master
+- Runtime image and a Kubernetes example
+
+## Requirements
+
+- PHP >= 8.3 (CI runs 8.3 and 8.4)
+- Extensions: `pcntl`, `posix`, `sockets`
+- Runtime Composer packages: **none**
+
+## Quick start
+
+Three commands, from the repository root. The third prints `hello`.
 
 ```sh
 composer install
 php bin/serverd start --foreground -c config/server.echo.php
 ```
 
-另一个终端：
+In another terminal:
 
 ```sh
 curl -sS http://127.0.0.1:9000/
 ```
 
-输出是 `hello`。停掉用 Ctrl-C。
+Stop the server with Ctrl-C.
 
-## 本地检查
+## Usage
+
+### Send a frame
+
+The spec is [`docs/protocol-text-rpc.md`](docs/protocol-text-rpc.md). With a server already listening, `len` is the body size in bytes and does not include the line ending:
+
+```sh
+body='{"method":"Echo.say","params":["hi"]}'
+printf 'TRPC/1 REQ 1 json %d\n%s\n' "$(printf %s "$body" | wc -c)" "$body" | nc 127.0.0.1 9000
+```
+
+Or the CLI:
+
+```sh
+bin/phpserver-rpc 127.0.0.1:9000 Echo.say '["hi"]' -v
+```
+
+`-v` prints frames on stderr, truncates the body to 256 bytes, and prints the trace-id. `--raw` prints the response body unchanged. Exit codes: `0` success, `1` RPC error, `2` protocol error, `3` network error, `64` usage error.
+
+### Single process
+
+The contract is [`docs/worker-contract.md`](docs/worker-contract.md). Copy-paste sessions are in [`docs/debugging.md`](docs/debugging.md).
+
+Echo, body `hello`:
+
+```sh
+php bin/worker --config config/server.echo.php Echo
+curl -sS http://127.0.0.1:9000/
+```
+
+Rpc example. `Echo.say` is registered by `examples/Rpc/bootstrap.php`. Stop the Echo process first; it also binds port 9000.
+
+```sh
+php bin/worker --config config/server.example.php Rpc
+bin/phpserver-rpc 127.0.0.1:9000 Echo.say '["hi"]' -v
+```
+
+`bin/worker` logs to stdout. `-v` lowers the level to debug. `--config` (or `-c`) is followed by a worker name. Exit codes: `0` stopped by a signal, `1` config or runtime error, `64` usage error.
+
+### Prefork
+
+Signal order and `terminationGracePeriodSeconds` are in [`docs/operations.md`](docs/operations.md).
+
+```sh
+php bin/serverd start --foreground -c config/server.example.php
+```
+
+`pid_file` defaults to empty, so no PID file is written. `stop`, `restart`, and `reload` need one. `status` does not: it GETs the admin `/status` endpoint.
+
+## Docker
+
+The dev image runs tests, static analysis, and the coding-style check. The runtime image runs `bin/serverd start --foreground` as uid 10001. Echo listens on `0.0.0.0:9000`, admin on `0.0.0.0:9100`. `docker stop` sends `SIGTERM`; the log contains `master draining`.
+
+```sh
+docker build --target dev -t phpserver:dev .
+docker run --rm phpserver:dev
+docker build --target runtime -t phpserver:runtime .
+docker run --rm -p 9000:9000 -p 9100:9100 phpserver:runtime
+```
+
+In another terminal: `curl -sS http://127.0.0.1:9000/`.
+
+The base image `php:8.4-cli-alpine` is multi-arch, and this Dockerfile has no architecture-specific steps. Daily CI builds the native architecture only. Both platforms:
+
+```sh
+docker buildx build --platform linux/amd64,linux/arm64 --target runtime -t phpserver:runtime .
+```
+
+`docker compose run --rm dev` runs the same three checks and mounts the working tree (`vendor` stays the image copy). A shell: `docker compose run --rm dev sh`.
+
+## Kubernetes
+
+Example manifests, not a Helm chart: [`deploy/k8s/`](deploy/k8s/README.md). Liveness is admin `/healthz`, readiness is `/readyz`, `terminationGracePeriodSeconds` is 10, and the Service publishes port 9000 only. The notes in that directory are in Chinese.
+
+## Documentation
+
+| Document | What it covers |
+| --- | --- |
+| [`docs/protocol-text-rpc.md`](docs/protocol-text-rpc.md) | Wire spec for text-rpc/1 |
+| [`docs/configuration.md`](docs/configuration.md) | Config keys and `PHPSERVER_*` |
+| [`docs/worker-contract.md`](docs/worker-contract.md) | `dealInput` / `dealProcess` |
+| [`docs/operations.md`](docs/operations.md) | Signals, drain, probes |
+| [`docs/debugging.md`](docs/debugging.md) | Short copy-paste sessions |
+| [`docs/event-loop.md`](docs/event-loop.md) | `SelectLoop` |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | v1 blueprint |
+| [`TODO.md`](TODO.md) | Milestone checklist |
+| [`benchmarks/`](benchmarks/README.md) | How to record a benchmark |
+| [`CHANGELOG.md`](CHANGELOG.md) | Library column and protocol column |
+
+Example configs:
+
+- [`config/server.echo.php`](config/server.echo.php) — smallest Echo
+- [`config/server.example.php`](config/server.example.php) — every key
+
+A bad config throws `PhpServer\Exception\ConfigException`. `ConfigLoader::loadOrExit()` writes the message to stderr and exits 1.
+
+## Development
 
 ```sh
 composer install
@@ -58,85 +186,18 @@ composer validate --strict
 composer show --tree
 ```
 
-`composer show --no-dev --name-only` 应为空。修正代码风格用 `composer cs:fix`。
+`composer show --no-dev --name-only` stays empty. Fix style with `composer cs:fix`.
 
-## 用 Docker 开始
+`SelectLoop` uses `stream_select`. When nothing is registered it sleeps, and it does not park a placeholder file descriptor. See [`docs/event-loop.md`](docs/event-loop.md).
 
-开发镜像跑测试、静态分析和代码风格。运行时镜像以 uid 10001 跑 `bin/serverd start --foreground`，Echo 听 `0.0.0.0:9000`，admin 听 `0.0.0.0:9100`。`docker stop` 发 `SIGTERM`，日志里有 `master draining`。
+## Provenance
 
-```sh
-docker build --target dev -t phpserver:dev .
-docker run --rm phpserver:dev
-docker build --target runtime -t phpserver:runtime .
-docker run --rm -p 9000:9000 -p 9100:9100 phpserver:runtime
-```
+This repository is an independent, clean-room rewrite inspired by the architecture of the original PHPServer (v1.3.4, from the PHP 5.6 era). That server was a multi-process PHP RPC server developed and used in production at Jumei (聚美优品). None of its source, configuration, or documentation is included here. What is kept is the original idea: a slight master that preforks workers, a select-based event loop, and a two-hook worker contract (`dealInput` / `dealProcess`). The names "PHPServer" and "Jumei" describe provenance only; this project is not affiliated with or endorsed by Jumei. See [NOTICE](NOTICE).
 
-另一个终端：`curl -sS http://127.0.0.1:9000/`。基础镜像 `php:8.4-cli-alpine` 是多架构的，本文件没有按 CPU 写死的步骤。日常 CI 只做本机架构。要同时打 amd64 和 arm64：
+## Contributing
 
-```sh
-docker buildx build --platform linux/amd64,linux/arm64 --target runtime -t phpserver:runtime .
-```
+Open an issue or a pull request. Before sending code, run `composer test`, `composer analyse`, and `composer cs` on PHP 8.3 or newer. Keep `composer.json` `require` free of packages. Behavior that changes a config key, an error code, the signal order, or an admin path needs the matching line in `docs/` updated in the same change.
 
-`docker compose run --rm dev` 同样跑三项检查，并把当前目录挂进容器（`vendor` 用镜像里的）。进 shell：`docker compose run --rm dev sh`。Kubernetes 示例在 [`deploy/k8s/`](deploy/k8s/README.md)。
-
-## 调用 text-rpc/1
-
-规格在 [`docs/protocol-text-rpc.md`](docs/protocol-text-rpc.md)。有服务端时可以手敲一帧（`len` 按 body 的字节数，不含行尾）：
-
-```sh
-body='{"method":"Echo.say","params":["hi"]}'
-printf 'TRPC/1 REQ 1 json %d\n%s\n' "$(printf %s "$body" | wc -c)" "$body" | nc 127.0.0.1 9000
-```
-
-或用官方 CLI：
-
-```sh
-bin/phpserver-rpc 127.0.0.1:9000 Echo.say '["hi"]' -v
-```
-
-`-v` 把收发的帧打到 stderr，body 截到 256 字节，并打印 trace-id。`--raw` 原样输出响应 body。退出码：`0` 成功，`1` RPC 错误，`2` 协议错误，`3` 网络错误，`64` 用法错误。协议测试夹具仍在 `tests/Fixture`，不依赖 `bin/worker`。
-
-## 单进程 worker
-
-契约在 [`docs/worker-contract.md`](docs/worker-contract.md)，三条能直接复制的命令在 [`docs/debugging.md`](docs/debugging.md)。
-
-Echo，body 是 `hello`：
-
-```sh
-php bin/worker --config config/server.echo.php Echo
-curl -sS http://127.0.0.1:9000/
-```
-
-Rpc 示例（`Echo.say` 由 `examples/Rpc/bootstrap.php` 登记）。先停掉上面的 Echo，它也占用 9000：
-
-```sh
-php bin/worker --config config/server.example.php Rpc
-bin/phpserver-rpc 127.0.0.1:9000 Echo.say '["hi"]' -v
-```
-
-`bin/worker` 把日志打到 stdout。`-v` 把级别降到 debug。`--config`（或 `-c`）后面跟一个 worker 名。退出码：`0` 被信号停掉，`1` 配置或运行错误，`64` 用法错误。
-
-一组进程用 `serverd`。信号顺序和 `terminationGracePeriodSeconds` 写在 [`docs/operations.md`](docs/operations.md)。
-
-```sh
-php bin/serverd start --foreground -c config/server.example.php
-```
-
-`pid_file` 默认空，不写 PID 文件。`stop` / `status` / `reload` 需要先配一个。
-
-## 事件循环
-
-[`docs/event-loop.md`](docs/event-loop.md)。`SelectLoop` 用 `stream_select`；没有流时睡眠，不放占位 FD。
-
-## 配置
-
-说明和键表在 [`docs/configuration.md`](docs/configuration.md)。示例：
-
-- [`config/server.echo.php`](config/server.echo.php) — 最小 Echo
-- [`config/server.example.php`](config/server.example.php) — 带全部键的示例
-
-校验失败时抛出 `PhpServer\Exception\ConfigException`。`ConfigLoader::loadOrExit()` 把消息写到 stderr 并以状态码 1 退出。
-
-## 许可
+## License
 
 [MIT](LICENSE)
