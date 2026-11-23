@@ -283,6 +283,8 @@ docker buildx build --platform linux/amd64,linux/arm64 --target runtime -t phpse
 
 ## 文档
 
+`docs/` 里的说明是英文。
+
 | 文档 | 内容 |
 | --- | --- |
 | [`docs/protocol-text-rpc.md`](docs/protocol-text-rpc.md) | text-rpc/1 线协议 |

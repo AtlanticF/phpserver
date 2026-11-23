@@ -1,14 +1,14 @@
-# 运行
+# Operations
 
-`bin/serverd` 是生产入口。它绑定每个 worker 的 listen，按 `child_count` fork，自己不 `accept`。管理口在 master 上，默认 `127.0.0.1:9100`。
+`bin/serverd` is the production entry. It binds each worker's listen socket, forks `child_count` workers, and does not `accept` itself. The admin port is on the master, `127.0.0.1:9100` by default.
 
-前台跑，日志在 stdout：
+Run in the foreground. Logs go to stdout:
 
 ```sh
 php bin/serverd start --foreground -c config/server.example.php
 ```
 
-不带 `--foreground` 时进程会双 fork 脱离终端。`pid_file` 为空时不写 PID 文件。`stop`、`restart`、`reload` 要有 PID 文件。`status` 不看 PID 文件，它请求本机 admin 的 `/status`：
+Without `--foreground` the process double-forks off the terminal. An empty `pid_file` means no PID file is written. `stop`, `restart`, and `reload` need a PID file. `status` does not. It requests the local admin `/status`:
 
 ```sh
 PHPSERVER_PID_FILE=/tmp/phpserver.pid php bin/serverd start -c config/server.example.php
@@ -17,13 +17,13 @@ PHPSERVER_PID_FILE=/tmp/phpserver.pid php bin/serverd reload -c config/server.ex
 PHPSERVER_PID_FILE=/tmp/phpserver.pid php bin/serverd stop -c config/server.example.php
 ```
 
-`status` 打印版本、uptime、master 的 fd 数量，以及每个 worker 的 pid、状态和请求数。fd 只是一个数。
+`status` prints the version, uptime, the master's fd count, and each worker's pid, state, and request count. The fd count is one number.
 
 ## Admin
 
-只接受 GET，请求头要在 1 秒内读完，超过 4096 字节还没读完头就关掉。`admin.token` 非空时要带 `Authorization: Bearer <token>`。`admin.enabled=false` 时不听这个口，业务端口照常工作。`admin.metrics=false` 时没有 `/metrics`，其它路径还在。
+GET only. The header must arrive within 1 second. If the header is still unfinished after 4096 bytes, the connection is closed. When `admin.token` is non-empty, send `Authorization: Bearer <token>`. `admin.enabled=false` does not listen on that port. The business port keeps working. `admin.metrics=false` removes `/metrics`. The other paths stay.
 
-这些路径只在 admin 口上。打到业务端口会按 Echo 或 text-rpc/1 处理，不会返回探针正文。
+These paths exist only on the admin port. A request to the business port is handled as Echo or text-rpc/1. It does not return probe text.
 
 ```sh
 curl -sS http://127.0.0.1:9100/healthz
@@ -32,38 +32,38 @@ curl -sS http://127.0.0.1:9100/status
 curl -sS http://127.0.0.1:9100/metrics
 ```
 
-`/healthz` 在 master 还在应答时是 200，只表示进程还在。`/readyz` 在已经 listen 且有 worker 时是 200。`SIGTERM` 一进处理函数，`/readyz` 就变成 503，哪怕业务 listen 还没关完。`/metrics` 是 Prometheus 文本，名字以 `phpserver_` 开头，计数器以 `_total` 结尾。
+`/healthz` is 200 while the master is still answering. It only means the process is up. `/readyz` is 200 once the process is listening and a worker is alive. As soon as the `SIGTERM` handler runs, `/readyz` becomes 503, even if the business listen socket is not closed yet. `/metrics` is Prometheus text. Names start with `phpserver_` and counters end with `_total`.
 
-限流默认不装。应用在 bootstrap 里调用 `setLimiter()`。`TokenBucket` 用标准库时钟。拒绝时客户端收到 `-32001`，`phpserver_rejected_total` 增加；不装限流器时这个计数保持 0。
+Rate limiting is not installed by default. The application calls `setLimiter()` from bootstrap. `TokenBucket` uses the standard-library clock. A rejection returns `-32001` to the client and increments `phpserver_rejected_total`. With no limiter installed, that counter stays 0.
 
-不是 root 时，配置了 `user` / `group` 也会跳过 `setuid` / `setgid`，进程照常启动。只有 root 才会降权，顺序是先 `setgid` 再 `setuid`，发生在 bind 和 fork 之前。
+When the process is not root, a configured `user` or `group` is skipped and the process still starts. Only root drops privileges, `setgid` then `setuid`, before bind and fork.
 
 ## SIGTERM / SIGINT
 
-对 master 发 `SIGTERM` 或 `SIGINT`（前台时 Ctrl-C 也是）时，顺序是：
+On `SIGTERM` or `SIGINT` to the master (Ctrl-C in the foreground is the same signal), the order is:
 
-1. Master 关掉自己的 listen，不再有新的描述符可以继承。
-2. Master 给每个 worker 发 IPC `drain`。
-3. Worker 关掉自己的 listen，已经 accept 的请求继续跑完并回复，然后退出。
-4. 全部退出后，master 以状态码 0 结束。
-5. 排空时间默认 **5 秒**。到点还活着的 worker 被 `SIGKILL`。这记入 `drain_timeout`，不记入 `forced_kill`。master 仍然以 0 退出。
+1. The master closes its own listen sockets, so no new descriptor can be inherited.
+2. The master sends an IPC `drain` to each worker.
+3. The worker closes its own listen socket, finishes requests it has already accepted, replies, and exits.
+4. After every worker has exited, the master exits 0.
+5. The drain timeout defaults to **5 seconds**. A worker still alive at the deadline is `SIGKILL`ed. That increments `drain_timeout`, not `forced_kill`. The master still exits 0.
 
-心跳是另一条路：master 每 **0.5 秒** 发 `ping`。连续 **2 次**没有 `pong` 就 `SIGKILL`，记入 `forced_kill`，然后拉起新 worker，`worker_restarts` 加一。这和排空超时不是同一个计数。
+Heartbeats are a separate path. The master sends `ping` every **0.5 seconds**. Two misses in a row mean `SIGKILL`, which increments `forced_kill`, and then a replacement worker, which increments `worker_restarts`. That is not the drain-timeout counter.
 
-worker 若 **2 秒**收不到 master 的任何 IPC 字节，或者 IPC 被关掉，就自己退出。所以 `kill -9` master 之后，worker 不会留下。
+A worker that receives no IPC byte from the master for **2 seconds**, or whose IPC is closed, exits on its own. After `kill -9` on the master, workers do not stay behind.
 
 ## reload
 
-`SIGUSR2` 或 `serverd reload` 逐个 drain 再拉起。同一时刻只换一个 worker，其余继续 accept。替换期间打到业务端口的请求应能完成。
+`SIGUSR2` or `serverd reload` drains and restarts workers one at a time. Only one worker is replaced at once. The others keep accepting. A request to the business port during the swap should still complete.
 
-## 回收阀
+## Recycle
 
-`max_requests` 和 `max_work_time` 默认 `0`，关闭。打开后，worker 在达到次数或时长时停止 accept，等在途请求结束，再退出。退出前会等一段随机时间，长度在 `0` 和 `recycle_stagger` 之间；`recycle_stagger` 为 0 则马上排空。master 看到退出后补一个新进程。
+`max_requests` and `max_work_time` default to `0`, which turns them off. When set, a worker stops accepting once it hits the count or the duration, finishes in-flight requests, and exits. Before exiting it waits a random time between `0` and `recycle_stagger`. A `recycle_stagger` of 0 drains immediately. The master starts a replacement when it sees the exit.
 
 ## Kubernetes
 
-容器里用 `start --foreground` 当 PID 1，这样 `docker stop` / `SIGTERM` 走上面的排空。
+In a container, `start --foreground` is PID 1, so `docker stop` and `SIGTERM` take the drain path above.
 
-`terminationGracePeriodSeconds` 要盖住排空时间再加余量。排空默认 5 秒，建议设成 **不少于 10 秒**。短于排空时间的话，kubelet 会在 master 完成 `SIGKILL` 之前把整个容器杀掉。
+`terminationGracePeriodSeconds` must cover the drain plus a margin. The drain defaults to 5 seconds, so set grace to **at least 10 seconds**. Shorter than the drain, kubelet kills the container before the master finishes its own `SIGKILL`.
 
-liveness 用 admin 的 `/healthz`，readiness 用 `/readyz`。不要把这两个路径指到业务端口。
+Liveness is admin `/healthz`. Readiness is `/readyz`. Do not point either path at the business port.
