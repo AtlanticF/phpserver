@@ -1,10 +1,10 @@
-# Worker 契约
+# Worker contract
 
-`bin/worker` 是一个前台进程：自己 `accept`，自己跑 `SelectLoop`。`bin/serverd` 用同一个 worker 类，再加 fork 和 IPC。业务只实现两个钩子。
+`bin/worker` is a foreground process. It `accept`s and runs `SelectLoop` itself. `bin/serverd` uses the same worker class and adds fork and IPC. Business code implements two hooks.
 
-## 两个钩子
+## The two hooks
 
-`PhpServer\Worker\WorkerInterface`：
+`PhpServer\Worker\WorkerInterface`:
 
 ```php
 public function dealInput(string $buffer): Input;
@@ -12,54 +12,54 @@ public function dealInput(string $buffer): Input;
 public function dealProcess(string $message): Output;
 ```
 
-`dealInput` 看当前连接还没消费的缓冲：
+`dealInput` looks at the bytes this connection has not consumed yet:
 
-- `Input::needMore()`：还不是一条完整消息。
-- `Input::ready($consumed)`：缓冲开头的 `$consumed` 个字节是一条消息。worker 先把这几个字节从缓冲里拿掉，再调用 `dealProcess`。持久连接不会把上一帧留在缓冲里。
-- `Input::failed($consumed, $reply, $close)`：这些字节非法。先写出 `$reply`，`$close` 为真时写完就关连接。
+- `Input::needMore()`: not a full message yet.
+- `Input::ready($consumed)`: the first `$consumed` bytes are one message. The worker drops those bytes, then calls `dealProcess`. A persistent connection does not leave the previous frame in the buffer.
+- `Input::failed($consumed, $reply, $close)`: those bytes are illegal. Write `$reply` first. When `$close` is true, close after the write finishes.
 
-`dealProcess` 返回要写回的字节。`Output` 的 `close` 为真时，写完这一条就关连接。
+`dealProcess` returns the bytes to write back. When `Output`'s `close` is true, the connection closes after that write.
 
-`AbstractWorker` 负责 listen、连接表、读缓冲上限和四种超时。`max_connections` 满了之后，多出来的连接会被 accept 然后立刻关掉，`conn_rejected` 加一，不会往读缓冲里放任何字节。读缓冲最长 `max_frame_bytes`，到顶还不成一条消息就当帧过大：`errors` 加一，写完 `frameTooLarge()` 的回复后关闭。
+`AbstractWorker` owns the listen socket, the connection table, the read-buffer cap, and the four timeouts. Once `max_connections` is full, extra connections are accepted and closed immediately. `conn_rejected` increments. Nothing is placed in the read buffer. The read buffer holds at most `max_frame_bytes`. If it fills before a message is complete, that is a frame-too-large: `errors` increments, `frameTooLarge()` is written, and the connection closes.
 
-钩子抛出的异常不会让进程退出。worker 记一条 error 日志，关掉这条连接，循环继续。
+An exception from a hook does not exit the process. The worker logs an error, closes that connection, and keeps looping.
 
-## 连接什么时候关
+## When a connection closes
 
-| 情况 | 回复 | 计数 |
-|------|------|------|
-| 超过 `max_connections` | 不读、不回 | `conn_rejected` |
-| 消息还没收完，到了 `recv_timeout` | 不回，直接关 | 不记 `errors` |
-| 两条消息之间空闲超过 `idle_timeout` | 不回，直接关 | `idle_timeout` |
-| 回复在 `send_timeout` 内写不完 | 已写出的留下，然后关 | 不记 `errors` |
-| 读缓冲达到 `max_frame_bytes` 仍不完整 | 子类的 `frameTooLarge()`，默认空回复 | `errors` |
-| `Output::$close` 或失败结果要求关闭 | 先把回复写完 | 视这条消息而定 |
-| 钩子抛异常且子类没有接住 | 不保证有协议回复 | `errors` |
+| Case | Reply | Counter |
+|------|-------|---------|
+| Over `max_connections` | nothing read, nothing written | `conn_rejected` |
+| Message still incomplete at `recv_timeout` | none, close | not `errors` |
+| Idle between messages past `idle_timeout` | none, close | `idle_timeout` |
+| Reply not finished within `send_timeout` | whatever was written stays, then close | not `errors` |
+| Read buffer hits `max_frame_bytes` and is still incomplete | the subclass's `frameTooLarge()`, empty by default | `errors` |
+| `Output::$close` or a failure result asks to close | the reply is written first | depends on the message |
+| A hook throws and the subclass does not catch it | a protocol reply is not guaranteed | `errors` |
 
-`bin/worker` 收到 `SIGTERM` 或 `SIGINT` 就停循环并退出。在 master 下面，这两个信号和 IPC `drain` 会先停止 accept，等已经接上的请求写完再退出。排空超时和心跳见 [operations.md](operations.md)。
+`bin/worker` stops the loop and exits on `SIGTERM` or `SIGINT`. Under the master, those signals and an IPC `drain` stop accept first and finish requests already taken. Drain timeout and heartbeats are in [operations.md](operations.md).
 
-`child_count`、`max_requests`、`max_work_time`、admin 端口在这个进程里不使用。
+`child_count`, `max_requests`, `max_work_time`, and the admin port are unused in this process.
 
 ## text-rpc/1
 
-`PhpServer\Worker\RpcWorker` 是抽象类，应用要再写一个具体子类（这样子类可以是 `final`）。方法用 `on(method, closure)` 登记，通常写在配置的 `bootstrap` 闭包里。闭包参数是 `(?array $params, string $traceId)`。
+`PhpServer\Worker\RpcWorker` is abstract. The application writes a concrete subclass so that subclass can be `final`. Register methods with `on(method, closure)`, usually from the config's `bootstrap` closure. The closure is `(?array $params, string $traceId)`.
 
-- `PING` 回 `PONG`，不调用 Handler。
-- 请求没带 trace-id 时生成 `r-` 加 16 位十六进制，并原样放进 `RES` / `ERR`。
-- 方法不存在是 `-32601`，连接保持。
-- Handler 抛出的任何 `Throwable` 变成 `-32603`，帧上的 message 固定是 `Internal error`，同样的 trace-id 写在头行和日志的 `request_id` 里。异常原文只进日志。连接保持，进程不退出。
-- 非法 JSON 是 `-32700`，结构不对是 `-32600`，都保持连接。
-- 头行非法、不认识的版本、`len` 超过 `max_body_bytes`：回复 `ERR` 后关闭。拿不到 id 时用 0。
-- 不支持的 codec 用 JSON 回 `-32004`，跳过这个 body，连接保持。
-- 一次读入里超过 `pipeline_backlog` 的帧不执行 Handler，按顺序回 `-32006`，连接保持。
-- Handler 返回时如果已经超过 `process_timeout`，丢掉结果，回 `-32003`，连接保持。worker 不会用信号打断正在跑的 Handler。
+- `PING` answers `PONG` and does not call a handler.
+- A request with no trace-id gets `r-` plus 16 hex digits, copied onto `RES` and `ERR`.
+- An unknown method is `-32601`. The connection stays open.
+- Any `Throwable` from a handler becomes `-32603`. The message on the frame is `Internal error`. The same trace-id is on the header and in the log's `request_id`. The exception text goes only to the log. The connection stays open and the process does not exit.
+- Illegal JSON is `-32700`. A body with the wrong shape is `-32600`. Both keep the connection.
+- A bad header, an unknown version, or a `len` past `max_body_bytes`: reply `ERR` and close. If there is no id, use 0.
+- An unsupported codec is answered with JSON `-32004`. That body is skipped. The connection stays open.
+- Frames past `pipeline_backlog` in one read do not run the handler. They are answered `-32006` in order. The connection stays open.
+- If the handler returns after `process_timeout`, the result is dropped and the reply is `-32003`. The connection stays open. The worker does not signal-interrupt a running handler.
 
-`dealProcess` 每处理一条消息，`requests` 加一。帧级拒绝不算 request。
+Each message `dealProcess` handles increments `requests`. A frame-level rejection is not a request.
 
 ## Echo
 
-`PhpServer\Examples\Echo\EchoWorker` 不说 text-rpc。它等到 HTTP 头结束（`\r\n\r\n`），回 `HTTP/1.1 200`，body 是 `hello`，然后关闭。所以 `curl` 打到业务端口看到的是明文 `hello`。
+`PhpServer\Examples\Echo\EchoWorker` does not speak text-rpc. It waits for the end of the HTTP headers (`\r\n\r\n`), replies `HTTP/1.1 200` with body `hello`, and closes. `curl` to the business port therefore prints `hello`.
 
-## 计数器
+## Counters
 
-`PhpServer\Metrics\Counters` 只在进程内累加，名字是 `accept`、`requests`、`errors`、`conn_rejected`、`idle_timeout`、`rejected`、`degraded`。Prometheus 文本由 master 在 admin 的 `/metrics` 上汇总，worker 进程不直接提供这个路径。
+`PhpServer\Metrics\Counters` accumulates inside the process. The names are `accept`, `requests`, `errors`, `conn_rejected`, `idle_timeout`, `rejected`, and `degraded`. Prometheus text is rendered by the master on admin `/metrics`. The worker process does not serve that path.

@@ -1,8 +1,8 @@
-# 配置
+# Configuration
 
-配置加载只负责把文件读进来并校验。`bin/worker` 会按其中一名 worker 的 `listen` 接连接。`bin/serverd` 在 master 里听 admin 口。下面的键是契约。
+Loading reads the file and checks it. `bin/worker` accepts on one worker's `listen`. `bin/serverd` listens for admin inside the master. The keys below are the contract.
 
-配置文件是一个返回关联数组的 PHP 文件。环境变量在文件值之后应用，同名时环境变量优先。
+A config file is a PHP file that returns an associative array. Environment variables are applied after the file. The environment wins on the same key.
 
 ```php
 <?php
@@ -19,72 +19,72 @@ return [
 ];
 ```
 
-每个 worker 至少要有 `listen` 和 `worker_class`。其余键有默认值。未知键不会让进程启动失败，会记一条 warning（挂在 `Config::$warnings` 上；如果构造 `ConfigLoader` 时传了 logger，也会打一条 warning 日志）。
+Every worker needs at least `listen` and `worker_class`. The other keys have defaults. An unknown key does not stop startup. It records a warning (on `Config::$warnings`, and as a warning log if the `ConfigLoader` was constructed with a logger).
 
-校验失败抛出 `PhpServer\Exception\ConfigException`。`ConfigLoader::loadOrExit()` 把同一段消息写到 stderr，前缀是 `phpserver: configuration error:`，然后以状态码 1 退出。
+A failed check throws `PhpServer\Exception\ConfigException`. `ConfigLoader::loadOrExit()` writes the same message to stderr, prefixed with `phpserver: configuration error:`, and exits 1.
 
-## 文件里的类型
+## Types in the file
 
-PHP 文件里用真正的类型：整数用 `int`，超时用 `int` 或 `float`，开关用 `bool`，地址和类名用 `string`。不要在文件里写 `'30'` 这种数字字符串。
+Use real PHP types in the file: `int` for integers, `int` or `float` for timeouts, `bool` for switches, `string` for addresses and class names. Do not write a numeric string such as `'30'`.
 
-环境变量全是字符串，按下表解析：
+Environment variables are all strings. They are parsed as follows:
 
-| 类型 | 接受的写法 |
-|------|------------|
-| int | 十进制，可带负号，不能有前导零，必须落在 PHP int 范围内 |
-| float | `30` 或 `30.5` |
-| bool | `true` / `false` / `1` / `0` / `yes` / `no` / `on` / `off`（大小写不敏感） |
-| string | 单行文本 |
+| Type | Accepted form |
+|------|----------------|
+| int | decimal, optional minus sign, no leading zeros, must fit in a PHP int |
+| float | `30` or `30.5` |
+| bool | `true` / `false` / `1` / `0` / `yes` / `no` / `on` / `off` (case insensitive) |
+| string | a single line of text |
 
-## 根键
+## Root keys
 
-| 键 | 默认 | 环境变量 | 说明 |
-|----|------|----------|------|
-| `pid_file` | `''` | `PHPSERVER_PID_FILE` | 空字符串表示不写 PID 文件 |
-| `user` | `''` | `PHPSERVER_USER` | 空表示不降权。否则是用户名或数字 uid |
-| `group` | `''` | `PHPSERVER_GROUP` | 同上，组名或 gid |
-| `log` | 见下表 | — | 日志 |
-| `admin` | 见下表 | — | 独立 admin 口，由 master 监听 |
-| `workers` | 必填，至少一个 | — | worker 名 => 选项。名字必须匹配 `[A-Za-z][A-Za-z0-9]*`，且大小写不能互相冲突 |
+| Key | Default | Environment | Meaning |
+|-----|---------|-------------|---------|
+| `pid_file` | `''` | `PHPSERVER_PID_FILE` | An empty string means no PID file is written |
+| `user` | `''` | `PHPSERVER_USER` | Empty means do not drop privileges. Otherwise a user name or a numeric uid |
+| `group` | `''` | `PHPSERVER_GROUP` | Same, a group name or a gid |
+| `log` | see below | — | Logging |
+| `admin` | see below | — | A separate admin port, listened by the master |
+| `workers` | required, at least one | — | worker name => options. The name must match `[A-Za-z][A-Za-z0-9]*`, and two names must not differ only by case |
 
-## 日志 `log`
+## Log `log`
 
-| 键 | 默认 | 环境变量 |
-|----|------|----------|
+| Key | Default | Environment |
+|-----|---------|-------------|
 | `level` | `info` | `PHPSERVER_LOG_LEVEL` |
 | `json` | `false` | `PHPSERVER_LOG_JSON` |
 | `timezone` | `UTC` | `PHPSERVER_LOG_TIMEZONE` |
 | `body_truncate_bytes` | `256` | `PHPSERVER_LOG_BODY_TRUNCATE_BYTES` |
 
-`level` 是 `debug`、`info`、`notice`、`warning`、`error`、`critical`、`alert`、`emergency` 之一，大小写不敏感。
+`level` is one of `debug`, `info`, `notice`, `warning`, `error`, `critical`, `alert`, `emergency`, case insensitive.
 
-时间只用于日志戳，格式是带微秒和数字时区偏移的 ISO-8601，例如 `2026-10-16T07:26:00.123456+00:00`。间隔和超时用单调时钟，不用这里的时区。
+The timezone is only for the log timestamp. The format is ISO-8601 with microseconds and a numeric offset, for example `2026-10-16T07:26:00.123456+00:00`. Intervals and timeouts use the monotonic clock, not this timezone.
 
-`body_truncate_bytes` 是调用方截断 body 时用的字节数（0 到 1 MiB）。截断按字节，不加后缀；正好等于阈值时不截。logger 不会自动截断，避免把截断藏起来。
+`body_truncate_bytes` is how many bytes a caller keeps when it truncates a body (0 to 1 MiB). Truncation is by bytes and adds no suffix. A body that is exactly the limit is not cut. The logger does not truncate on its own, so the cut is not hidden.
 
-JSON 行的字段是 `ts`、`level`、`message`，有 request-id 时还有 `request_id`，其余上下文在 `context` 里。没有 request-id 时不出现这个字段。
+A JSON line has `ts`, `level`, and `message`. It also has `request_id` when there is one. The rest of the context is under `context`. With no request-id, that field is absent.
 
-request-id 字符集与 text-rpc/1 的 trace-id 相同：`[A-Za-z0-9._-]{1,64}`。`RequestId::generate()` 生成 `r-` 加 16 位十六进制。不合法的 id 不会写进日志。
+The request-id alphabet is the text-rpc/1 trace-id alphabet: `[A-Za-z0-9._-]{1,64}`. `RequestId::generate()` produces `r-` plus 16 hex digits. An illegal id is not written to the log.
 
 ## Admin `admin`
 
-| 键 | 默认 | 环境变量 |
-|----|------|----------|
+| Key | Default | Environment |
+|-----|---------|-------------|
 | `enabled` | `true` | `PHPSERVER_ADMIN_ENABLED` |
 | `listen` | `127.0.0.1:9100` | `PHPSERVER_ADMIN_LISTEN` |
 | `token` | `''` | `PHPSERVER_ADMIN_TOKEN` |
 | `metrics` | `true` | `PHPSERVER_ADMIN_METRICS` |
 
-`enabled` 为 false 时不把 admin 地址算进端口冲突，master 也不听这个口。地址格式错误仍然会失败。`token` 为空表示不校验；否则请求要带 `Authorization: Bearer <token>`。`metrics` 为 false 时没有 `/metrics`。
+When `enabled` is false, the admin address is left out of the port-conflict check and the master does not listen on it. A malformed address still fails. An empty `token` means no check. Otherwise the request must send `Authorization: Bearer <token>`. When `metrics` is false there is no `/metrics`.
 
 ## Worker
 
-名字举例：`Echo`、`Rpc`。全局环境变量会套到每一个 worker 上；单个 worker 的变量再覆盖回去。
+Example names: `Echo`, `Rpc`. A global environment variable applies to every worker. A per-worker variable overrides it again.
 
-| 键 | 默认 | 作用到全部 worker | 只作用到名为 Echo 的 worker |
-|----|------|-------------------|------------------------------|
-| `listen` | 必填 | `PHPSERVER_LISTEN` | `PHPSERVER_WORKER_ECHO_LISTEN` |
-| `worker_class` | 必填 | `PHPSERVER_WORKER_CLASS` | `PHPSERVER_WORKER_ECHO_WORKER_CLASS` |
+| Key | Default | Every worker | Only the worker named Echo |
+|-----|---------|--------------|----------------------------|
+| `listen` | required | `PHPSERVER_LISTEN` | `PHPSERVER_WORKER_ECHO_LISTEN` |
+| `worker_class` | required | `PHPSERVER_WORKER_CLASS` | `PHPSERVER_WORKER_ECHO_WORKER_CLASS` |
 | `bootstrap` | `''` | `PHPSERVER_BOOTSTRAP` | `PHPSERVER_WORKER_ECHO_BOOTSTRAP` |
 | `child_count` | `1` | `PHPSERVER_CHILD_COUNT` | `PHPSERVER_WORKER_ECHO_CHILD_COUNT` |
 | `backlog` | `511` | `PHPSERVER_BACKLOG` | `PHPSERVER_WORKER_ECHO_BACKLOG` |
@@ -100,42 +100,42 @@ request-id 字符集与 text-rpc/1 的 trace-id 相同：`[A-Za-z0-9._-]{1,64}`�
 | `max_work_time` | `0` | `PHPSERVER_MAX_WORK_TIME` | `PHPSERVER_WORKER_ECHO_MAX_WORK_TIME` |
 | `recycle_stagger` | `0` | `PHPSERVER_RECYCLE_STAGGER` | `PHPSERVER_WORKER_ECHO_RECYCLE_STAGGER` |
 
-超时的单位是秒。`recv_timeout`、`send_timeout`、`idle_timeout`、`process_timeout` 必须大于 0，并且不超过 365 天。`max_work_time` 和 `recycle_stagger` 允许 0，0 表示关闭。`max_requests` 为 0 也表示关闭回收阀。
+Timeouts are in seconds. `recv_timeout`, `send_timeout`, `idle_timeout`, and `process_timeout` must be greater than 0 and at most 365 days. `max_work_time` and `recycle_stagger` may be 0, which turns them off. `max_requests` of 0 also turns the recycle valve off.
 
-`child_count` 必须是大于等于 1 的整数。
+`child_count` must be an integer greater than or equal to 1.
 
-`listen` 写成 `host:port` 或 `[ipv6]:port`。不要写 `tcp://`。端口范围 1–65535，不能有前导零。`*`、`0.0.0.0`、`::` 视为通配地址。
+Write `listen` as `host:port` or `[ipv6]:port`. Do not write `tcp://`. The port is 1–65535 with no leading zeros. `*`, `0.0.0.0`, and `::` are wildcards.
 
-### 端口冲突
+### Port conflicts
 
-下面的情况会失败：
+Startup fails when:
 
-- 两个 worker 的 host 和 port 都相同
-- admin 开着，并且和某个 worker 落在同一个 host:port
-- 同一端口上，一边是通配地址，另一边是任意地址（含另一个通配地址）
+- two workers have the same host and port
+- admin is enabled and lands on the same host:port as a worker
+- one side of a port is a wildcard and the other side is any address (including another wildcard)
 
-不解析 DNS。`127.0.0.1` 和 `10.0.0.8` 的同一端口不冲突。`127.0.0.1` 和 `0.0.0.0` 的同一端口冲突。这是故意偏严，避免启动后才发现 bind 失败。
+DNS is not resolved. `127.0.0.1` and `10.0.0.8` on the same port do not conflict. `127.0.0.1` and `0.0.0.0` on the same port do. That is deliberately strict, so a bind failure is not discovered after startup.
 
-admin 关闭时不参加这次比较。
+A disabled admin port is left out of this comparison.
 
-### 帧大小
+### Frame size
 
-对齐 text-rpc/1：
+Aligned with text-rpc/1:
 
-- 头行上限 256 字节，不可配置
-- `max_body_bytes` 默认 1 MiB，硬上限 64 MiB（67108864）
-- `max_frame_bytes` 是未完成帧的读缓冲上限，默认等于 `max_body_bytes + 260`
-- 260 = 256 字节头行 + 头行后的 CR LF + body 后的 CR LF
-- 显式设置时必须落在 `[max_body_bytes + 260, 67108864 + 260]` 里，保证最大的合法帧放得下
+- the header line cap is 256 bytes and is not configurable
+- `max_body_bytes` defaults to 1 MiB, with a hard cap of 64 MiB (67108864)
+- `max_frame_bytes` is the read-buffer cap for an unfinished frame, defaulting to `max_body_bytes + 260`
+- 260 = a 256-byte header line + the CR LF after the header + the CR LF after the body
+- an explicit value must fall in `[max_body_bytes + 260, 67108864 + 260]`, so the largest legal frame fits
 
 ### `worker_class`
 
-非空的类名字符串，例如 `PhpServer\Examples\Echo\EchoWorker`。加载配置时不检查这个类是否存在。`bin/worker` 启动时才加载它：类必须已能自动加载，并且是 `AbstractWorker` 的具体子类。
+A non-empty class-name string, for example `PhpServer\Examples\Echo\EchoWorker`. Loading the config does not check that the class exists. `bin/worker` loads it at startup. The class must already be autoloadable, and it must be a concrete subclass of `AbstractWorker`.
 
-`bootstrap` 是相对当前工作目录的 PHP 文件路径，默认空。文件可以返回一个闭包，参数是刚构造好的 worker；什么都不返回也可以。`examples/Rpc/bootstrap.php` 用这个闭包登记 `Echo.say`。
+`bootstrap` is a PHP file path relative to the current working directory. It defaults to empty. The file may return a closure that receives the worker just constructed. Returning nothing is also fine. `examples/Rpc/bootstrap.php` uses that closure to register `Echo.say`.
 
-## 不认识的环境变量
+## Unknown environment variables
 
-`PHPSERVER_` 开头但不是上表中的变量，会记 warning 并忽略。没有这个前缀的变量与本服务器无关。
+A variable that starts with `PHPSERVER_` but is not in the tables above is logged as a warning and ignored. A variable without that prefix is unrelated to this server.
 
-没有 worker 时，worker 相关的变量不会偷偷生效，也会记一条 warning，同时因为缺少 `workers` 而校验失败。
+With no workers, worker-related variables do not take effect quietly. They also log a warning, and validation fails because `workers` is missing.

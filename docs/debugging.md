@@ -1,45 +1,45 @@
-# 调试
+# Debugging
 
-下面三条都在仓库根目录执行，并且每次只起一个 worker。Echo 和示例 Rpc 的配置都听 `127.0.0.1:9000`，不要一起起。
+Run each of these from the repository root, and start only one worker at a time. The Echo config and the sample Rpc config both listen on `127.0.0.1:9000`. Do not start them together.
 
-## 1. 单进程 Echo
+## 1. Single-process Echo
 
 ```sh
 php bin/worker --config config/server.echo.php Echo
 ```
 
-另一个终端：
+In another terminal:
 
 ```sh
 curl -sS http://127.0.0.1:9000/
 ```
 
-输出是 `hello`。worker 的日志在第一个终端的 stdout。`Ctrl-C` 或 `SIGTERM` 让进程以状态码 0 退出。
+The body is `hello`. The worker logs on stdout in the first terminal. `Ctrl-C` or `SIGTERM` exits 0.
 
-## 2. 打一帧 RPC
+## 2. One RPC frame
 
 ```sh
 php bin/worker --config config/server.example.php Rpc
 ```
 
-另一个终端：
+In another terminal:
 
 ```sh
 bin/phpserver-rpc 127.0.0.1:9000 Echo.say '["hi"]' -v
 ```
 
-stdout 是 `"hi"`。`-v` 把帧打到 stderr，并打印 `trace-id:`。这帧由 `examples/Rpc/bootstrap.php` 登记的 `Echo.say` 处理。
+stdout is `"hi"`. `-v` prints the frames on stderr and prints `trace-id:`. `examples/Rpc/bootstrap.php` registers `Echo.say`.
 
-手敲同一帧：
+The same frame by hand:
 
 ```sh
 body='{"method":"Echo.say","params":["hi"]}'
 printf 'TRPC/1 REQ 1 json %d\n%s\n' "$(printf %s "$body" | wc -c)" "$body" | nc 127.0.0.1 9000
 ```
 
-## 3. 跟着 request-id 看日志
+## 3. Follow a request-id
 
-给这一帧指定 trace-id，并让 worker 把 debug 日志打到 stdout：
+Set a trace-id on the frame, and have the worker print debug logs on stdout:
 
 ```sh
 php bin/worker -v --config config/server.example.php Rpc
@@ -49,19 +49,19 @@ php bin/worker -v --config config/server.example.php Rpc
 bin/phpserver-rpc 127.0.0.1:9000 Echo.say '["hi"]' --trace-id=demo-1 -v
 ```
 
-worker 的 stdout 里有 `request_id=demo-1`。CLI 的 stderr 里有 `trace-id: demo-1`。两边是同一个 id。
+The worker stdout contains `request_id=demo-1`. The CLI stderr contains `trace-id: demo-1`. They are the same id.
 
-方法不存在或 Handler 抛异常时，错误帧和日志共用这个 id。帧上的 message 是协议里的短句（例如 `Internal error`），异常原文只出现在 worker 日志里：
+A missing method or a thrown handler shares that id between the error frame and the log. The message on the frame is the short protocol sentence (for example `Internal error`). The exception text appears only in the worker log:
 
 ```sh
 bin/phpserver-rpc 127.0.0.1:9000 Missing.method '[]' --trace-id=demo-err -v
 ```
 
-在 worker 的 stdout 里搜 `demo-err`。
+Search the worker stdout for `demo-err`.
 
-## 4. 看 admin，而不是业务端口
+## 4. Look at admin, not the business port
 
-先起 master（示例配置的 admin 是 `127.0.0.1:9100`，业务是 `127.0.0.1:9000`）：
+Start the master. The sample config serves admin on `127.0.0.1:9100` and the business port on `127.0.0.1:9000`:
 
 ```sh
 php bin/serverd start --foreground -c config/server.example.php
@@ -74,4 +74,4 @@ curl -sS http://127.0.0.1:9100/metrics
 php bin/serverd status -c config/server.example.php
 ```
 
-`/healthz` 为 `ok` 只说明 master 还在。`/readyz` 为 `ready` 才表示有 worker 在听。`status` 读的是 admin 的 `/status`。业务端口上的 `/healthz` 不是探针。
+`/healthz` answering `ok` only means the master is still answering. `/readyz` answering `ready` means a worker is listening. `status` reads admin `/status`. `/healthz` on the business port is not a probe.

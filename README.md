@@ -44,7 +44,7 @@ This is a clean-room rewrite of the 2016 PHPServer idea: one master, preforked w
 
 Admin probes and metrics listen on their own port, `127.0.0.1:9100` by default. Do not point `/healthz` or `/readyz` at the business port. Rate limiting is off unless a bootstrap calls `setLimiter()`.
 
-Deeper docs in this repository are written in Chinese. The links below still point at the current behavior.
+The documents under `docs/` are in English.
 
 ## Features
 
