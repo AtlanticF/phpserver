@@ -140,6 +140,7 @@ worker 和 master 各自跑一个循环。一拍的顺序是：**信号 → 定�
 | `Server` | `@api` |
 | `Master`、`Ipc`、`Admin` 的类型，`PrometheusText` | `@internal`（公开的是信号、CLI、admin 路径、计数器名和指标名） |
 | `LimiterInterface`、`Decision`、`TokenBucket` | `@api` |
+| `AgentFailure`、`AgentError`、`BusinessException` | `@api` |
 
 1.0.0 已发布。指标名、admin 路径、配置键、CLI 参数是公开契约。压测数字不进版本承诺；`SO_REUSEPORT` 仍留在 1.0 之后。
 

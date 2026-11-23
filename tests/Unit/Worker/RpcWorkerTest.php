@@ -6,6 +6,9 @@ namespace PhpServer\Tests\Unit\Worker;
 
 use PhpServer\Config\WorkerConfig;
 use PhpServer\Event\SelectLoop;
+use PhpServer\Exception\AgentError;
+use PhpServer\Exception\AgentFailure;
+use PhpServer\Exception\BusinessException;
 use PhpServer\Metrics\Counters;
 use PhpServer\Protocol\TextRpc\ErrorCode;
 use PhpServer\Protocol\TextRpc\Frame;
@@ -53,6 +56,24 @@ final class RpcWorkerTest extends TestCase
         });
         $this->worker()->on('Demo.boom', static function (?array $params, string $traceId): never {
             throw new \RuntimeException('boom-marker');
+        });
+        $this->worker()->on('Order.get', static function (?array $params, string $traceId): never {
+            throw new BusinessException(new AgentError(
+                code: 1001,
+                message: 'Order not found',
+                reason: 'ORDER_NOT_FOUND',
+                domain: 'shop.example',
+                param: 'id',
+                hint: 'Pass an id that exists.',
+            ));
+        });
+        $this->worker()->on('Order.broken', static function (?array $params, string $traceId): never {
+            throw new class ('secret-marker') extends \RuntimeException implements AgentFailure {
+                public function agentError(): AgentError
+                {
+                    throw new \RuntimeException($this->getMessage());
+                }
+            };
         });
         [$this->server, $this->peer] = $this->pair();
         self::assertTrue($this->worker()->watch($this->server));
@@ -114,6 +135,48 @@ final class RpcWorkerTest extends TestCase
         self::assertSame('still', (new JsonCodec())->decodeResult($this->frames($again)[0]->body));
         self::assertSame(2, $this->counters()->get('requests'));
         self::assertTrue(is_resource($this->server));
+    }
+
+    public function testBusinessFailureStaysOnTheConnectionWithoutCountingAnInternalError(): void
+    {
+        $raw = $this->ask($this->request(4, 'Order.get', ['id' => ''], 'order-1'));
+        $frame = $this->frames($raw)[0];
+        $error = (new JsonCodec())->decodeError($frame->body);
+        self::assertSame(1001, $error->code);
+        self::assertSame('Order not found', $error->message);
+        self::assertSame('order-1', $frame->header->traceId);
+        self::assertSame([
+            'reason' => 'ORDER_NOT_FOUND',
+            'domain' => 'shop.example',
+            'retryable' => false,
+            'param' => 'id',
+            'hint' => 'Pass an id that exists.',
+        ], $error->data);
+        self::assertStringNotContainsString('stack', $raw);
+        self::assertSame(0, $this->counters()->get('errors'));
+        $logged = false;
+        foreach ($this->logger()->records as $record) {
+            if ($record['level'] === 'info' && $record['message'] === 'business error') {
+                self::assertSame('order-1', $record['context']['request_id']);
+                self::assertSame('ORDER_NOT_FOUND', $record['context']['reason']);
+                $logged = true;
+            }
+        }
+        self::assertTrue($logged);
+
+        $again = $this->ask($this->request(5, 'Echo.say', ['still']));
+        self::assertSame('still', (new JsonCodec())->decodeResult($this->frames($again)[0]->body));
+        self::assertTrue(is_resource($this->server));
+    }
+
+    public function testABrokenAgentFailureBecomesAnInternalError(): void
+    {
+        $raw = $this->ask($this->request(4, 'Order.broken', [], 'broken-1'));
+        $error = (new JsonCodec())->decodeError($this->frames($raw)[0]->body);
+        self::assertSame(ErrorCode::InternalError->value, $error->code);
+        self::assertSame('Internal error', $error->message);
+        self::assertStringNotContainsString('secret-marker', $raw);
+        self::assertSame(1, $this->counters()->get('errors'));
     }
 
     public function testFrameTooLargeRepliesAndCloses(): void

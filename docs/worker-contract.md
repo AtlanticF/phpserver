@@ -47,7 +47,8 @@ public function dealProcess(string $message): Output;
 - `PING` 回 `PONG`，不调用 Handler。
 - 请求没带 trace-id 时生成 `r-` 加 16 位十六进制，并原样放进 `RES` / `ERR`。
 - 方法不存在是 `-32601`，连接保持。
-- Handler 抛出的任何 `Throwable` 变成 `-32603`，帧上的 message 固定是 `Internal error`，同样的 trace-id 写在头行和日志的 `request_id` 里。异常原文只进日志。连接保持，进程不退出。
+- Handler 抛出 `PhpServer\Exception\AgentFailure`（可以直接用 `BusinessException`）时，回复业务 `ERR`：`code` 是 `AgentError` 里大于等于 1 的整数，`message` 是那句短句，`data` 是 `reason`、`domain`、`retryable`，以及可选的 `param` 和 `hint`。连接保持。这不算 `errors`。日志是 info，`business error`，带同一个 trace-id。
+- 其它 `Throwable` 变成 `-32603`，帧上的 message 固定是 `Internal error`，同样的 trace-id 写在头行和日志的 `request_id` 里。异常原文只进日志。连接保持，进程不退出。`AgentFailure::agentError()` 自己再抛异常时也走这条路。
 - 非法 JSON 是 `-32700`，结构不对是 `-32600`，都保持连接。
 - 头行非法、不认识的版本、`len` 超过 `max_body_bytes`：回复 `ERR` 后关闭。拿不到 id 时用 0。
 - 不支持的 codec 用 JSON 回 `-32004`，跳过这个 body，连接保持。
