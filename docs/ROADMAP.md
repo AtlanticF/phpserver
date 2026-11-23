@@ -140,6 +140,7 @@ The annotations that have landed follow the source:
 | `Server` | `@api` |
 | `Master`, `Ipc`, `Admin` types, `PrometheusText` | `@internal` (signals, the CLI, admin paths, counter names, and metric names are public) |
 | `LimiterInterface`, `Decision`, `TokenBucket` | `@api` |
+| `AgentFailure`, `AgentError`, `BusinessException` | `@api` |
 
 1.0.0 is released. Metric names, admin paths, config keys, and CLI arguments are public contracts. Benchmark numbers are not part of the version promise. `SO_REUSEPORT` stays after 1.0.
 

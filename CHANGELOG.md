@@ -6,7 +6,11 @@
 
 ### 库
 
+- Handler 可以抛 `AgentFailure`（现成的是 `BusinessException`）。worker 把它编成业务 `ERR`，`data` 里是 `reason`、`domain`、`retryable`，以及可选的 `param` 和 `hint`。其它异常仍是 `-32603`。
+
 ### text-rpc 协议
+
+- 业务错误（`code >= 1`）的 `data` 对象约定见 `docs/protocol-text-rpc.md` §6.1。线协议版本仍是 `text-rpc/1`。
 
 ## 1.0.0
 

@@ -100,7 +100,7 @@ use PhpServer\Worker\RpcWorker;
 final class AppWorker extends RpcWorker {}
 ```
 
-`OrderApi.php`. The return value is encoded as the JSON `result`. A thrown exception becomes `-32603` with the message `Internal error`, so put a business failure in the result.
+`OrderApi.php`. A normal return is the JSON `result`. A failure the caller can fix throws `BusinessException`. Any other exception stays `-32603` with the message `Internal error`.
 
 ```php
 <?php
@@ -109,6 +109,9 @@ declare(strict_types=1);
 
 namespace App;
 
+use PhpServer\Exception\AgentError;
+use PhpServer\Exception\BusinessException;
+
 final class OrderApi
 {
     /** @param array<array-key, mixed>|null $params */
@@ -116,13 +119,22 @@ final class OrderApi
     {
         $id = is_array($params) ? (string) ($params['id'] ?? '') : '';
         if ($id === '') {
-            return ['ok' => false, 'error' => 'id required'];
+            throw new BusinessException(new AgentError(
+                code: 1001,
+                message: 'Order not found',
+                reason: 'ORDER_NOT_FOUND',
+                domain: 'shop.example',
+                param: 'id',
+                hint: 'Pass an id that exists.',
+            ));
         }
 
-        return ['ok' => true, 'id' => $id];
+        return ['id' => $id];
     }
 }
 ```
+
+`reason` is the stable token an agent branches on. `retryable` defaults to false, so the same call is not repeated. Implement `AgentFailure` on an existing exception type when `BusinessException` does not fit. The wire shape is in [`docs/protocol-text-rpc.md`](docs/protocol-text-rpc.md).
 
 `bootstrap.php`, relative to the working directory. An associative array arrives as an associative array. A JSON array arrives as a list. Both an empty object and an empty array arrive as `[]`.
 
@@ -184,7 +196,10 @@ $client->connect('127.0.0.1:9000', 2.0);
 try {
     $order = $client->call('Order.get', ['id' => '7'], 'order-7')->result;
 } catch (RpcError $error) {
-    // $error->getCode() is the text-rpc/1 code. $error->traceId matches the server log.
+    $data = is_array($error->data) ? $error->data : [];
+    if (($data['retryable'] ?? false) === true) {
+        // Repeat this same call. Otherwise change $data['param'] using $data['reason'].
+    }
 }
 
 $client->close();

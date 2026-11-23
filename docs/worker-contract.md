@@ -47,7 +47,8 @@ An exception from a hook does not exit the process. The worker logs an error, cl
 - `PING` answers `PONG` and does not call a handler.
 - A request with no trace-id gets `r-` plus 16 hex digits, copied onto `RES` and `ERR`.
 - An unknown method is `-32601`. The connection stays open.
-- Any `Throwable` from a handler becomes `-32603`. The message on the frame is `Internal error`. The same trace-id is on the header and in the log's `request_id`. The exception text goes only to the log. The connection stays open and the process does not exit.
+- A handler that throws `PhpServer\Exception\AgentFailure` (or `BusinessException`) gets a business `ERR`. `code` is the integer from `AgentError`, at least 1. `message` is that short sentence. `data` is `reason`, `domain`, `retryable`, and the optional `param` and `hint`. The connection stays open. This does not increment `errors`. The log line is info, `business error`, with the same trace-id.
+- Any other `Throwable` becomes `-32603`. The message on the frame is `Internal error`. The same trace-id is on the header and in the log's `request_id`. The exception text goes only to the log. The connection stays open and the process does not exit. If `AgentFailure::agentError()` itself throws, that path is used too.
 - Illegal JSON is `-32700`. A body with the wrong shape is `-32600`. Both keep the connection.
 - A bad header, an unknown version, or a `len` past `max_body_bytes`: reply `ERR` and close. If there is no id, use 0.
 - An unsupported codec is answered with JSON `-32004`. That body is skipped. The connection stays open.

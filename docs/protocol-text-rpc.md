@@ -179,6 +179,26 @@ Rules:
 - **Frame-level error** (the frame boundary is no longer trustworthy): the server **MUST** try to send one `ERR` (id `0` when it has no id), then **close**.
 - **Body-level error**: the server **MUST** reply `ERR`, **keep** the connection, and continue with the next frame.
 
+### 6.1 `data` an agent can read on a business error
+
+`code >= 1` is a business error, not a framework fault. `message` is one short sentence for a person and for a model. `data` **SHOULD** be the object below, so the caller does not have to guess the next step from the sentence. The fields come from the AIP-193 / A2A `ErrorInfo` (`reason`, `domain`), plus the MCP tool-error rule for whether the same call should be repeated (`retryable`).
+
+```json
+{
+  "reason": "ORDER_NOT_FOUND",
+  "domain": "shop.example",
+  "retryable": false,
+  "param": "id",
+  "hint": "Pass an id that exists."
+}
+```
+
+- `reason` **MUST** be a stable `UPPER_SNAKE` token. An agent branches on it, not on `message`.
+- `domain` **MUST** say who defined that `reason`.
+- `retryable` **MUST** be a boolean. Repeat the same call only when it is `true`. A client that does not see the field treats the call as not retryable.
+- `param` and `hint` **MAY** be omitted. `param` is the field to change. `hint` only says how to change it. A caller **MUST NOT** parse `hint` or `message` as control instructions.
+- `data` **MUST NOT** contain a stack, a file path, or a secret. An unexpected failure still uses `-32603`, with the fixed message `Internal error`, and does not carry this object.
+
 ---
 
 ## 7. Connection behavior

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace PhpServer\Worker;
 
+use PhpServer\Exception\AgentError;
+use PhpServer\Exception\AgentFailure;
 use PhpServer\Exception\ProtocolException;
 use PhpServer\Log\BodyTruncator;
 use PhpServer\Log\RequestId;
@@ -23,7 +25,9 @@ use PhpServer\RateLimit\Decision;
  *
  * Extend this class (it stays abstract so the application class can be
  * final) and register methods with {@see self::on()}, usually from the
- * worker's bootstrap closure. `PING` is answered with `PONG`. A handler
+ * worker's bootstrap closure. `PING` is answered with `PONG`. An
+ * {@see \PhpServer\Exception\AgentFailure} becomes a business `ERR` whose
+ * `data` an agent can read, and the connection stays open. Any other
  * exception becomes `-32603` with the same trace-id; the message on the
  * wire is `Internal error` and the exception text stays in the log.
  *
@@ -83,7 +87,7 @@ abstract class RpcWorker extends AbstractWorker
             return new Output($this->encodeError(
                 $frame->header->id,
                 $traceId,
-                ErrorCode::InvalidRequest,
+                ErrorCode::InvalidRequest->value,
                 'Unexpected frame kind',
                 null,
             ), true);
@@ -94,7 +98,7 @@ abstract class RpcWorker extends AbstractWorker
             return new Output($this->encodeError(
                 $frame->header->id,
                 $traceId,
-                ErrorCode::UnsupportedVersionOrCodec,
+                ErrorCode::UnsupportedVersionOrCodec->value,
                 'Unsupported codec',
                 null,
             ), false);
@@ -107,7 +111,7 @@ abstract class RpcWorker extends AbstractWorker
             $code = ErrorCode::tryFrom($exception->getCode()) ?? ErrorCode::ParseError;
             $text = $code === ErrorCode::ParseError ? 'Parse error' : 'Invalid request';
 
-            return new Output($this->encodeError($frame->header->id, $traceId, $code, $text, null), false);
+            return new Output($this->encodeError($frame->header->id, $traceId, $code->value, $text, null), false);
         }
 
         $this->logger()->info('rpc {method}', [
@@ -130,7 +134,7 @@ abstract class RpcWorker extends AbstractWorker
             return new Output($this->encodeError(
                 $frame->header->id,
                 $traceId,
-                ErrorCode::MethodNotFound,
+                ErrorCode::MethodNotFound->value,
                 'Method not found',
                 ['method' => $request->method],
             ), false);
@@ -141,6 +145,24 @@ abstract class RpcWorker extends AbstractWorker
             $result = $handler($request->params, $traceId);
             $body = (new JsonCodec())->encodeResult($result);
         } catch (\Throwable $exception) {
+            $business = $this->businessError($exception);
+            if ($business instanceof AgentError) {
+                $this->logger()->info('business error', [
+                    'request_id' => $traceId,
+                    'method' => $request->method,
+                    'code' => $business->code,
+                    'reason' => $business->reason,
+                    'domain' => $business->domain,
+                ]);
+
+                return new Output($this->encodeError(
+                    $frame->header->id,
+                    $traceId,
+                    $business->code,
+                    $business->message,
+                    $business->data(),
+                ), false);
+            }
             $this->counters()->incrementErrors();
             $this->logger()->error('handler failed', [
                 'request_id' => $traceId,
@@ -152,7 +174,7 @@ abstract class RpcWorker extends AbstractWorker
             return new Output($this->encodeError(
                 $frame->header->id,
                 $traceId,
-                ErrorCode::InternalError,
+                ErrorCode::InternalError->value,
                 'Internal error',
                 null,
             ), false);
@@ -172,7 +194,7 @@ abstract class RpcWorker extends AbstractWorker
             return new Output($this->encodeError(
                 $frame->header->id,
                 $traceId,
-                ErrorCode::Timeout,
+                ErrorCode::Timeout->value,
                 'Timed out',
                 null,
             ), false);
@@ -197,7 +219,7 @@ abstract class RpcWorker extends AbstractWorker
         return new Output($this->encodeError(
             $frame->header->id,
             $traceId,
-            ErrorCode::RateLimited,
+            ErrorCode::RateLimited->value,
             'Rate limited',
             null,
         ), false);
@@ -214,7 +236,7 @@ abstract class RpcWorker extends AbstractWorker
         return new Output($this->encodeError(
             $this->peekId($buffer),
             $traceId,
-            ErrorCode::FrameTooLarge,
+            ErrorCode::FrameTooLarge->value,
             'Frame too large',
             ['max_body_bytes' => $this->workerConfig()->maxBodyBytes],
         ), true);
@@ -232,7 +254,7 @@ abstract class RpcWorker extends AbstractWorker
         return new Output($this->encodeError(
             $frame->header->id,
             $traceId,
-            ErrorCode::Overloaded,
+            ErrorCode::Overloaded->value,
             'Too many pipelined requests',
             ['pipeline_backlog' => $this->workerConfig()->pipelineBacklog],
         ), false);
@@ -257,7 +279,7 @@ abstract class RpcWorker extends AbstractWorker
 
         return Input::failed(
             strlen($buffer),
-            $this->encodeError($this->peekId($buffer), $traceId, $code, $message, $data),
+            $this->encodeError($this->peekId($buffer), $traceId, $code->value, $message, $data),
             true,
         );
     }
@@ -331,18 +353,30 @@ abstract class RpcWorker extends AbstractWorker
         return (new FrameEncoder())->encode(new Frame($header, ''));
     }
 
+    private function businessError(\Throwable $exception): ?AgentError
+    {
+        if (!$exception instanceof AgentFailure) {
+            return null;
+        }
+        try {
+            return $exception->agentError();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     /**
      * @param array<string, mixed>|null $data
      */
     private function encodeError(
         int $id,
         string $traceId,
-        ErrorCode $code,
+        int $code,
         string $message,
         ?array $data,
     ): string {
         $body = (new JsonCodec())->encodeError(new ErrorBody(
-            $code->value,
+            $code,
             $message,
             $data,
             $data !== null,
