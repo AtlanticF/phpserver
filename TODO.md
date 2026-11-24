@@ -6,7 +6,7 @@
 
 ## M1 骨架与基础件
 
-- [x] `composer.json`：包名 `phpserver/phpserver`、MIT、`php >=8.3`、扩展 `pcntl` / `posix` / `sockets`，`require` 无包，`bin` 登记三个脚本。验收：`composer validate --strict` 通过，`composer show --no-dev --name-only` 为空。
+- [x] `composer.json`：包名 `atlanticf/phpserver`、MIT、`php >=8.3`、扩展 `pcntl` / `posix` / `sockets`，`require` 无包，`bin` 登记三个脚本。验收：`composer validate --strict` 通过，`composer show --no-dev --name-only` 为空。
 - [x] PHPUnit 11 的 Unit / Integration 两套件、PHPStan level max、php-cs-fixer `@PER-CS`。验收：`phpunit.xml.dist`、`phpstan.neon`、`.php-cs-fixer.dist.php` 与 CI 一致。
 - [x] `.github/workflows/ci.yml` 在 PHP 8.3 和 8.4 上跑 validate、无运行时包、`cs`、`analyse`、`test`。验收：工作流包含这两档，且 `fail-fast` 为 false。
 - [x] `CHANGELOG.md` 把库和 text-rpc 协议分成两栏；`LICENSE` 为 MIT。验收：两栏都在；协议实现记在协议栏，不跟库的补丁号绑死。

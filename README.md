@@ -27,6 +27,7 @@ This is a clean-room rewrite of the 2016 PHPServer idea: one master, preforked w
 - [About](#about)
 - [Features](#features)
 - [Requirements](#requirements)
+- [Install](#install)
 - [Quick start](#quick-start)
 - [Usage](#usage)
   - [A small service](#a-small-service)
@@ -62,6 +63,27 @@ The documents under `docs/` are in English.
 - PHP >= 8.3 (CI runs 8.3 and 8.4)
 - Extensions: `pcntl`, `posix`, `sockets`
 - Runtime Composer packages: **none**
+
+## Install
+
+The package name is `atlanticf/phpserver`. PHP is `>=8.3`, with extensions `pcntl`, `posix`, and `sockets`. There are no runtime Composer packages.
+
+| Autoload | Path | When |
+| --- | --- | --- |
+| `PhpServer\` | `src/` | always |
+| `PhpServer\Examples\` | `examples/` | always, so the sample Echo config loads with `--no-dev` |
+| `PhpServer\Tests\` | `tests/` | dev only |
+
+Composer installs three binaries: `vendor/bin/serverd`, `vendor/bin/worker`, and `vendor/bin/phpserver-rpc`.
+
+The git tag `v1.0.0` still names the package `phpserver/phpserver`, so it is not a release of `atlanticf/phpserver`. Do not `composer require` that old name: on Packagist it is a different 2018 project (`bitbucket.org/phpserver/phpserver`). After this change is on `main`, install `dev-main`. That branch is aliased to `1.1.x-dev`.
+
+```sh
+composer config repositories.atlanticf-phpserver '{"type":"vcs","url":"https://github.com/AtlanticF/phpserver"}'
+composer require atlanticf/phpserver:dev-main
+```
+
+There is no `version` field in `composer.json`. Composer reads the version from the git tag. A `^1.0` constraint starts matching only after a tag whose `composer.json` uses this package name.
 
 ## Quick start
 

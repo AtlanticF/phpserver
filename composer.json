@@ -1,9 +1,14 @@
 {
-    "name": "phpserver/phpserver",
+    "name": "atlanticf/phpserver",
     "description": "Slight prefork multi-process text RPC server for PHP, Kubernetes-ready.",
     "type": "library",
     "license": "MIT",
     "keywords": ["rpc", "server", "prefork", "pcntl", "kubernetes"],
+    "homepage": "https://github.com/AtlanticF/phpserver",
+    "support": {
+        "issues": "https://github.com/AtlanticF/phpserver/issues",
+        "source": "https://github.com/AtlanticF/phpserver"
+    },
     "require": {
         "php": ">=8.3",
         "ext-pcntl": "*",
@@ -35,6 +40,11 @@
         "bin/worker",
         "bin/phpserver-rpc"
     ],
+    "extra": {
+        "branch-alias": {
+            "dev-main": "1.1.x-dev"
+        }
+    },
     "config": {
         "sort-packages": true,
         "allow-plugins": {}

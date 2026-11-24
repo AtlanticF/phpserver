@@ -27,6 +27,7 @@
 - [简介](#简介)
 - [功能](#功能)
 - [要求](#要求)
+- [安装](#安装)
 - [快速开始](#快速开始)
 - [用法](#用法)
   - [一个小服务](#一个小服务)
@@ -60,6 +61,27 @@
 - PHP >= 8.3（CI 覆盖 8.3 和 8.4）
 - 扩展：`pcntl`、`posix`、`sockets`
 - 运行时 Composer 包：**没有**
+
+## 安装
+
+包名是 `atlanticf/phpserver`。PHP 约束是 `>=8.3`，扩展是 `pcntl`、`posix`、`sockets`。没有运行时 Composer 包。
+
+| 自动加载 | 路径 | 何时 |
+| --- | --- | --- |
+| `PhpServer\` | `src/` | 始终 |
+| `PhpServer\Examples\` | `examples/` | 始终，这样示例 Echo 配置在 `--no-dev` 下也能加载 |
+| `PhpServer\Tests\` | `tests/` | 仅开发 |
+
+Composer 会装三个命令：`vendor/bin/serverd`、`vendor/bin/worker`、`vendor/bin/phpserver-rpc`。
+
+git 标签 `v1.0.0` 里的包名仍是 `phpserver/phpserver`，所以它不是 `atlanticf/phpserver` 的发行版。不要 `composer require` 那个旧名字：Packagist 上它是 2018 年的另一个项目（`bitbucket.org/phpserver/phpserver`）。这次改动进 `main` 之后，安装 `dev-main`。这条分支的别名是 `1.1.x-dev`。
+
+```sh
+composer config repositories.atlanticf-phpserver '{"type":"vcs","url":"https://github.com/AtlanticF/phpserver"}'
+composer require atlanticf/phpserver:dev-main
+```
+
+`composer.json` 里没有 `version` 字段。版本只从 git 标签读。`^1.0` 要等一个 `composer.json` 使用这个包名的新标签才会匹配。
 
 ## 快速开始
 
