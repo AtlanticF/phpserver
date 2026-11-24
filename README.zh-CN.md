@@ -27,6 +27,7 @@
 - [简介](#简介)
 - [功能](#功能)
 - [要求](#要求)
+- [安装](#安装)
 - [快速开始](#快速开始)
 - [用法](#用法)
   - [一个小服务](#一个小服务)
@@ -60,6 +61,27 @@
 - PHP >= 8.3（CI 覆盖 8.3 和 8.4）
 - 扩展：`pcntl`、`posix`、`sockets`
 - 运行时 Composer 包：**没有**
+
+## 安装
+
+包名是 `phpserver/phpserver`。PHP 约束是 `>=8.3`，扩展是 `pcntl`、`posix`、`sockets`。没有运行时 Composer 包。
+
+| 自动加载 | 路径 | 何时 |
+| --- | --- | --- |
+| `PhpServer\` | `src/` | 始终 |
+| `PhpServer\Examples\` | `examples/` | 始终，这样示例 Echo 配置在 `--no-dev` 下也能加载 |
+| `PhpServer\Tests\` | `tests/` | 仅开发 |
+
+Composer 会装三个命令：`vendor/bin/serverd`、`vendor/bin/worker`、`vendor/bin/phpserver-rpc`。
+
+`v1.0.0` 就是 git 标签 `v1.0.0`。不要从 Packagist 装这个名字。那个页面是 2018 年的另一个项目（`bitbucket.org/phpserver/phpserver`）。先把 Composer 指到这个 Git 仓库，否则装到的是那个旧包。`dev-main` 别名是 `1.1.x-dev`，因为 main 已经超过 `1.0.0` 标签。
+
+```sh
+composer config repositories.phpserver '{"type":"vcs","url":"https://github.com/AtlanticF/phpserver"}'
+composer require phpserver/phpserver:^1.0
+```
+
+`composer.json` 里没有 `version` 字段。版本只从 git 标签读。
 
 ## 快速开始
 

@@ -3,3 +3,15 @@
 bin/serverd text eol=lf
 bin/worker text eol=lf
 bin/phpserver-rpc text eol=lf
+
+# Dist zips (Composer, Packagist) omit repo tooling. The lock file stays in git for CI.
+/.github export-ignore
+/.dockerignore export-ignore
+/.php-cs-fixer.dist.php export-ignore
+/Dockerfile export-ignore
+/benchmarks export-ignore
+/compose.yaml export-ignore
+/composer.lock export-ignore
+/phpstan.neon export-ignore
+/phpunit.xml.dist export-ignore
+/tests export-ignore

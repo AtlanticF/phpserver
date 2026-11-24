@@ -27,6 +27,7 @@ This is a clean-room rewrite of the 2016 PHPServer idea: one master, preforked w
 - [About](#about)
 - [Features](#features)
 - [Requirements](#requirements)
+- [Install](#install)
 - [Quick start](#quick-start)
 - [Usage](#usage)
   - [A small service](#a-small-service)
@@ -62,6 +63,27 @@ The documents under `docs/` are in English.
 - PHP >= 8.3 (CI runs 8.3 and 8.4)
 - Extensions: `pcntl`, `posix`, `sockets`
 - Runtime Composer packages: **none**
+
+## Install
+
+The package name is `phpserver/phpserver`. PHP is `>=8.3`, with extensions `pcntl`, `posix`, and `sockets`. There are no runtime Composer packages.
+
+| Autoload | Path | When |
+| --- | --- | --- |
+| `PhpServer\` | `src/` | always |
+| `PhpServer\Examples\` | `examples/` | always, so the sample Echo config loads with `--no-dev` |
+| `PhpServer\Tests\` | `tests/` | dev only |
+
+Composer installs three binaries: `vendor/bin/serverd`, `vendor/bin/worker`, and `vendor/bin/phpserver-rpc`.
+
+`v1.0.0` is the git tag `v1.0.0`. Do not install this name from Packagist. That page is a different 2018 project (`bitbucket.org/phpserver/phpserver`). Point Composer at this Git repository first, or that other package is what gets installed. `dev-main` is aliased to `1.1.x-dev` because main is already past the `1.0.0` tag.
+
+```sh
+composer config repositories.phpserver '{"type":"vcs","url":"https://github.com/AtlanticF/phpserver"}'
+composer require phpserver/phpserver:^1.0
+```
+
+There is no `version` field in `composer.json`. Composer reads the version from the git tag.
 
 ## Quick start
 
