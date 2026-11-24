@@ -6,7 +6,7 @@
 
 ### 库
 
-- 安装说明写明包名 `phpserver/phpserver`、PSR-4、三个 bin，以及 PHP `>=8.3`。发行包用 `.gitattributes` 的 `export-ignore` 去掉测试和 CI。`dev-main` 的分支别名是 `1.1.x-dev`。`composer.json` 不写 `version`。
+- 包名是 `atlanticf/phpserver`。安装说明写明 PSR-4、三个 bin，以及 PHP `>=8.3`。发行包用 `.gitattributes` 的 `export-ignore` 去掉测试和 CI。`dev-main` 的分支别名是 `1.1.x-dev`。`composer.json` 不写 `version`。已有的 `v1.0.0` 标签仍是旧包名。
 - Handler 可以抛 `AgentFailure`（现成的是 `BusinessException`）。worker 把它编成业务 `ERR`，`data` 里是 `reason`、`domain`、`retryable`，以及可选的 `param` 和 `hint`。其它异常仍是 `-32603`。
 
 ### text-rpc 协议

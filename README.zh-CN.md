@@ -64,7 +64,7 @@
 
 ## 安装
 
-包名是 `phpserver/phpserver`。PHP 约束是 `>=8.3`，扩展是 `pcntl`、`posix`、`sockets`。没有运行时 Composer 包。
+包名是 `atlanticf/phpserver`。PHP 约束是 `>=8.3`，扩展是 `pcntl`、`posix`、`sockets`。没有运行时 Composer 包。
 
 | 自动加载 | 路径 | 何时 |
 | --- | --- | --- |
@@ -74,14 +74,14 @@
 
 Composer 会装三个命令：`vendor/bin/serverd`、`vendor/bin/worker`、`vendor/bin/phpserver-rpc`。
 
-`v1.0.0` 就是 git 标签 `v1.0.0`。不要从 Packagist 装这个名字。那个页面是 2018 年的另一个项目（`bitbucket.org/phpserver/phpserver`）。先把 Composer 指到这个 Git 仓库，否则装到的是那个旧包。`dev-main` 别名是 `1.1.x-dev`，因为 main 已经超过 `1.0.0` 标签。
+git 标签 `v1.0.0` 里的包名仍是 `phpserver/phpserver`，所以它不是 `atlanticf/phpserver` 的发行版。不要 `composer require` 那个旧名字：Packagist 上它是 2018 年的另一个项目（`bitbucket.org/phpserver/phpserver`）。这次改动进 `main` 之后，安装 `dev-main`。这条分支的别名是 `1.1.x-dev`。
 
 ```sh
-composer config repositories.phpserver '{"type":"vcs","url":"https://github.com/AtlanticF/phpserver"}'
-composer require phpserver/phpserver:^1.0
+composer config repositories.atlanticf-phpserver '{"type":"vcs","url":"https://github.com/AtlanticF/phpserver"}'
+composer require atlanticf/phpserver:dev-main
 ```
 
-`composer.json` 里没有 `version` 字段。版本只从 git 标签读。
+`composer.json` 里没有 `version` 字段。版本只从 git 标签读。`^1.0` 要等一个 `composer.json` 使用这个包名的新标签才会匹配。
 
 ## 快速开始
 

@@ -1,5 +1,5 @@
 {
-    "name": "phpserver/phpserver",
+    "name": "atlanticf/phpserver",
     "description": "Slight prefork multi-process text RPC server for PHP, Kubernetes-ready.",
     "type": "library",
     "license": "MIT",
